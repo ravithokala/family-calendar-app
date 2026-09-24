@@ -6,10 +6,11 @@ import { call, lastTiming, signOut, sessionKey } from './api.js';
 import { el, isoDate, addDays, addMonths, mondayOf, niceDate, longDate, monthTitle } from './dom.js';
 import * as cache from './cache.js';
 import { daySection, remindersOn } from './views/parts.js';
-import { monthView, monthRange } from './views/month.js';
+import { monthView, monthRange, fetchRangeFor } from './views/month.js';
 import { eventSheet, eventDetails, routineSheet, reminderSheet } from './views/forms.js';
 import { moreView } from './views/more.js';
 import { reviewView } from './views/review.js';
+import { printSheet } from './views/print.js';
 import { openSheet, toast } from './views/sheet.js';
 import { busy } from './views/fields.js';
 
@@ -193,6 +194,8 @@ async function show(force = false) {
   document.querySelectorAll('#filters button').forEach((b) => b.setAttribute('aria-pressed', String(b.getAttribute('data-view') === s.view)));
   $('title').textContent = f.title;
   $('today-button').hidden = s.screen === 'today';
+  $('print-button').hidden = s.screen !== 'month';
+  $('print-button').onclick = () => printSheet(formContext(), today(), s.date.slice(0, 7));
   $('prev').hidden = f.prev === null;
   $('next').hidden = f.next === null;
   $('prev').onclick = () => f.prev && go({ date: f.prev });
@@ -200,13 +203,14 @@ async function show(force = false) {
   $('filters').hidden = s.screen === 'more' || s.screen === 'review';
   if (s.screen === 'more' || s.screen === 'review') {
     $('today-button').hidden = true;
+    $('print-button').hidden = true;
     await (s.screen === 'more' ? showMore(mine) : showReview(mine));
     return;
   }
 
   // Every screen fetches the whole month grid around it, so Day, Week, Today and Month share one
   // answer and switching between them never waits (RT, 2026-09-24).
-  const fetchRange = monthRange(`${f.from.slice(0, 7)}-01`);
+  const fetchRange = fetchRangeFor(s.screen, s.date, f.from);
   const key = `days:${fetchRange.from}:${fetchRange.to}`;
   const covering = cache.covering(f.from, f.to);
   const status = el('p', { class: 'status muted' }, 'Updating…');

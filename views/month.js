@@ -49,3 +49,18 @@ export function monthRange(monthStart) {
   const last = addDays(next.toISOString().slice(0, 10), -1);
   return { from, to: addDays(last, 6 - weekdayIndex(last)) };
 }
+
+/**
+ * The month grid a screen loads: the Month screen's own month (its grid starts in the previous
+ * month, so its first day will not do); otherwise the month of the screen's first day, whose grid
+ * always contains that day's week and the day after.
+ * @param {string} screen
+ * @param {string} date   the screen's date
+ * @param {string} from   the first day the screen shows
+ */
+export function fetchRangeFor(screen, date, from) {
+  const range = monthRange(`${(screen === 'month' ? date : from).slice(0, 7)}-01`);
+  // Today also shows tomorrow, which a month ending on a Sunday leaves out (still within 42 days).
+  const tomorrow = addDays(from, 1);
+  return screen === 'today' && range.to < tomorrow ? { ...range, to: tomorrow } : range;
+}

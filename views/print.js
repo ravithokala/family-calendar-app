@@ -9,8 +9,9 @@ import { field, select, saveButton } from './fields.js';
  * saved to Drive, with links to open them.
  * @param {import('./forms.js').FormContext} ctx
  * @param {string} today
+ * @param {string} [chosen]  YYYY-MM to preselect, e.g. the month on screen
  */
-export function printSheet(ctx, today) {
+export function printSheet(ctx, today, chosen) {
   /** @type {Array<[string, string]>} */
   const months = [];
   for (let i = -1; i <= 6; i++) {
@@ -19,7 +20,8 @@ export function printSheet(ctx, today) {
     const iso = d.toISOString().slice(0, 10);
     months.push([iso.slice(0, 7), monthTitle(iso)]);
   }
-  const month = select(months[2]?.[0] ?? months[1][0], months);
+  // The month on screen, or else next month (calendars are usually printed ahead).
+  const month = select(chosen && months.some(([m]) => m === chosen) ? chosen : months[2]?.[0] ?? months[1][0], months);
   const result = el('div', {});
   const form = el('div', { class: 'form' },
     field('Month', month.node),
