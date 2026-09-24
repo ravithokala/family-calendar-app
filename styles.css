@@ -115,3 +115,4 @@ button:disabled { opacity: 0.6; }
 #toast { position: fixed; left: 12px; right: 12px; bottom: calc(132px + env(safe-area-inset-bottom)); z-index: 4; background: var(--text); color: var(--bg);
   padding: 10px 14px; border-radius: 10px; font-size: 14px; box-shadow: 0 4px 14px rgba(0,0,0,0.25); }
 #toast .warn { margin-top: 6px; color: #F2D58A; }
+.version { margin-top: 28px; text-align: center; }

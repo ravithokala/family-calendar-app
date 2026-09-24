@@ -4,6 +4,7 @@ import { el, niceDate } from '../dom.js';
 import { reminderSheet, routineSheet } from './forms.js';
 import { showIssues } from './sheet.js';
 import { busy } from './fields.js';
+import { VERSION } from '../version.js';
 
 /**
  * The More screen: reminders (add, edit, done, cancel, reopen) and routines (list, add).
@@ -59,5 +60,6 @@ export function moreView(ctx, data) {
             ...data.schedules.filter((s) => s.activity_id === a.activity_id && s.status === 'ACTIVE').map(scheduleText),
             a.term_time_only ? 'term time' : '',
           ].filter(Boolean).join(' · ')))))),
-      el('p', { class: 'muted small' }, 'Changing or ending a routine is not available yet.')));
+      el('p', { class: 'muted small' }, 'Changing or ending a routine is not available yet.')),
+    el('p', { class: 'muted small version' }, `Family Cal · version ${VERSION}`));
 }
