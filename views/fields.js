@@ -84,3 +84,23 @@ export function saveButton(label, save) {
   });
   return button;
 }
+
+/**
+ * Runs a server request from a button, disabled and saying so until the answer comes back, so it
+ * cannot be pressed twice.
+ * @template T
+ * @param {HTMLButtonElement} button
+ * @param {() => Promise<T>} work
+ * @returns {Promise<T>}
+ */
+export async function busy(button, work) {
+  const label = button.textContent;
+  button.disabled = true;
+  button.textContent = 'Working…';
+  try {
+    return await work();
+  } finally {
+    button.disabled = false;
+    button.textContent = label;
+  }
+}

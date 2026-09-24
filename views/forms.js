@@ -2,7 +2,7 @@
 
 import { el, longDate } from '../dom.js';
 import { openSheet, showIssues } from './sheet.js';
-import { field, input, select, checkbox, chips, saveButton } from './fields.js';
+import { field, input, select, checkbox, chips, saveButton, busy } from './fields.js';
 import { timeText } from './parts.js';
 
 /**
@@ -115,10 +115,10 @@ export function eventDetails(ctx, theme, item, date) {
     el('dl', { class: 'details-list' }, rows.map(([k, v]) => [el('dt', {}, k), el('dd', {}, v)])),
     el('div', { class: 'actions' },
       el('button', { class: 'primary', type: 'button', onclick: () => { sheet.close(); eventSheet(ctx, { item }); } }, 'Edit'),
-      el('button', { class: 'danger', type: 'button', onclick: async () => {
+      el('button', { class: 'danger', type: 'button', onclick: async (/** @type {Event} */ ev) => {
         const what = item.routine ? `this ${item.title} session only` : `"${item.title}"`;
         if (!confirm(`Cancel ${what}? It is kept in the history and can be restored.`)) return;
-        const r = await ctx.call('events.cancel', { event_id: item.event_id });
+        const r = await busy(/** @type {HTMLButtonElement} */ (ev.currentTarget), () => ctx.call('events.cancel', { event_id: item.event_id }));
         if (!r.ok) { showIssues(sheet.messages, r); return; }
         sheet.close();
         ctx.saved(`Cancelled "${item.title}".`, r);

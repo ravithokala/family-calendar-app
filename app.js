@@ -10,6 +10,7 @@ import { monthView, monthRange } from './views/month.js';
 import { eventSheet, eventDetails, routineSheet, reminderSheet } from './views/forms.js';
 import { moreView } from './views/more.js';
 import { openSheet, toast } from './views/sheet.js';
+import { busy } from './views/fields.js';
 
 /**
  * The family app (ADR-078, ADR-080). It holds no calendar rules and no family data: everything
@@ -121,8 +122,8 @@ function draw(s, all) {
   const ctx = formContext();
   /** @param {string} date */
   const onItem = (date) => (/** @type {import('./views/parts.js').AppItem} */ item) => eventDetails(ctx, t, item, date);
-  const onRestore = async (/** @type {import('./views/parts.js').CancelledItem} */ c) => {
-    const r = await call('events.restore', { event_id: c.event_id });
+  const onRestore = async (/** @type {import('./views/parts.js').CancelledItem} */ c, /** @type {HTMLButtonElement} */ button) => {
+    const r = await busy(button, () => call('events.restore', { event_id: c.event_id }));
     if (r.ok) ctx.saved(`Restored "${c.title}".`, r);
     else toast(r.errors.map((e) => e.message).join('; '));
   };
@@ -184,7 +185,10 @@ async function show(force = false) {
     return;
   }
 
-  const key = `days:${f.from}:${f.to}`;
+  // Every screen fetches the whole month grid around it, so Day, Week, Today and Month share one
+  // answer and switching between them never waits (RT, 2026-09-24).
+  const fetchRange = monthRange(`${f.from.slice(0, 7)}-01`);
+  const key = `days:${fetchRange.from}:${fetchRange.to}`;
   const saved = cache.covering(f.from, f.to);
   const status = el('p', { class: 'status muted' }, 'Updating…');
   if (saved) {
@@ -198,14 +202,15 @@ async function show(force = false) {
     $('main').replaceChildren(el('p', { class: 'muted' }, 'Loading… (the first load of the day can take a few seconds)'));
   }
   try {
-    const r = await call('app.days', { from: f.from, to: f.to });
+    const r = await call('app.days', fetchRange);
     if (mine !== showing) return;
     if (!r.ok) throw new Error(r.errors.map((e) => e.message).join('; '));
     cache.write(key, r.data);
     showPending(r.data.pending);
     try { sessionStorage.removeItem('fc.reloaded'); } catch (e) { /* ignore */ }
+    const shown = cache.covering(f.from, f.to);
     const server = lastTiming.server_ms === null ? '' : ` · server ${(lastTiming.server_ms / 1000).toFixed(1)} s`;
-    $('main').replaceChildren(draw(s, r.data),
+    $('main').replaceChildren(draw(s, shown ? shown.data : r.data),
       refreshLink(`Updated ${clock(Date.now())} · ${(lastTiming.total_ms / 1000).toFixed(1)} s${server}`));
   } catch (e) {
     if (mine !== showing) return;

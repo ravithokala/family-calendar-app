@@ -3,6 +3,7 @@
 import { el, niceDate } from '../dom.js';
 import { reminderSheet, routineSheet } from './forms.js';
 import { showIssues } from './sheet.js';
+import { busy } from './fields.js';
 
 /**
  * The More screen: reminders (add, edit, done, cancel, reopen) and routines (list, add).
@@ -12,8 +13,8 @@ import { showIssues } from './sheet.js';
 export function moreView(ctx, data) {
   const messages = el('div', { class: 'messages' });
   /** @param {import('./forms.js').Reminder} r @param {string} status @param {string} done */
-  const setStatus = async (r, status, done) => {
-    const answer = await ctx.call('reminders.setStatus', { reminder_id: r.reminder_id, status });
+  const setStatus = (r, status, done) => async (/** @type {Event} */ ev) => {
+    const answer = await busy(/** @type {HTMLButtonElement} */ (ev.currentTarget), () => ctx.call('reminders.setStatus', { reminder_id: r.reminder_id, status }));
     if (!answer.ok) { showIssues(messages, answer); return; }
     ctx.saved(done, answer);
   };
@@ -29,10 +30,10 @@ export function moreView(ctx, data) {
       r.status === 'ACTIVE'
         ? el('div', { class: 'row-actions' },
           el('button', { class: 'link', type: 'button', onclick: () => reminderSheet(ctx, r) }, 'Edit'),
-          el('button', { class: 'link', type: 'button', onclick: () => setStatus(r, 'DONE', `Marked "${r.title}" done.`) }, 'Done'),
-          el('button', { class: 'link danger-text', type: 'button', onclick: () => setStatus(r, 'CANCELLED', `Cancelled "${r.title}".`) }, 'Cancel'))
+          el('button', { class: 'link', type: 'button', onclick: setStatus(r, 'DONE', `Marked "${r.title}" done.`) }, 'Done'),
+          el('button', { class: 'link danger-text', type: 'button', onclick: setStatus(r, 'CANCELLED', `Cancelled "${r.title}".`) }, 'Cancel'))
         : el('div', { class: 'row-actions' }, el('span', { class: 'muted' }, r.status.toLowerCase()),
-          el('button', { class: 'link', type: 'button', onclick: () => setStatus(r, 'ACTIVE', `Reopened "${r.title}".`) }, 'Reopen'))));
+          el('button', { class: 'link', type: 'button', onclick: setStatus(r, 'ACTIVE', `Reopened "${r.title}".`) }, 'Reopen'))));
 
   const scheduleText = (/** @type {any} */ s) => (s.schedule_type === 'EXPLICIT_DATES'
     ? `published dates to ${niceDate(s.valid_to)}`

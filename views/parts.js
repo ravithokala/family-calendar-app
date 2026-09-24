@@ -103,7 +103,7 @@ export function itemRow(theme, i, onItem) {
  * @param {Theme} theme
  * @param {string} title
  * @param {AppDay|undefined} day
- * @param {{ onTitle?: () => void, onItem?: (item: AppItem) => void, onRestore?: (c: CancelledItem) => void }} [options]
+ * @param {{ onTitle?: () => void, onItem?: (item: AppItem) => void, onRestore?: (c: CancelledItem, button: HTMLButtonElement) => void }} [options]
  */
 export function daySection(theme, title, day, options = {}) {
   const cancelled = options.onRestore && day?.cancelled?.length ? el('div', { class: 'cancelled' },
@@ -111,7 +111,7 @@ export function daySection(theme, title, day, options = {}) {
     el('ul', { class: 'items' }, (day?.cancelled ?? []).map((c) => el('li', { class: 'item' },
       el('span', { class: 'time' }, c.start_time ?? ''),
       el('div', { class: 'body' }, el('s', {}, `${c.participants.join('+')} - ${c.title}`), ' ',
-        el('button', { class: 'link', type: 'button', onclick: () => options.onRestore?.(c) }, 'Restore')))))) : '';
+        el('button', { class: 'link', type: 'button', onclick: (/** @type {Event} */ ev) => options.onRestore?.(c, /** @type {HTMLButtonElement} */ (ev.currentTarget)) }, 'Restore')))))) : '';
   const note = day ? schoolNote(theme, day.school) : '';
   return el('section', { class: 'day-section' },
     el('h2', { class: options.onTitle ? 'link-title' : '', onclick: options.onTitle }, title,
