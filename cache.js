@@ -6,7 +6,7 @@
  */
 const PREFIX = 'fc.cache.';
 /** Enough for a few months, weeks and days either way; the oldest go first. */
-const KEEP = 30;
+const KEEP = 20;
 
 /**
  * @param {string} key
@@ -41,20 +41,19 @@ export function clear() {
 }
 
 /**
- * The freshest saved answer for a view that covers [from, to], cut down to those days: a loaded
- * month already holds its weeks and days (ADR-080).
- * @param {string} view
+ * The freshest saved answer covering [from, to], cut down to those days: a loaded month already
+ * holds its weeks and days, for every filter (ADR-080).
  * @param {string} from
  * @param {string} to
  * @returns {{ at: number, data: any } | null}
  */
-export function covering(view, from, to) {
+export function covering(from, to) {
   /** @type {{ at: number, data: any } | null} */
   let best = null;
   try {
     for (const key of Object.keys(localStorage)) {
-      const m = key.match(/^fc\.cache\.days:([A-Z]+):(\d{4}-\d{2}-\d{2}):(\d{4}-\d{2}-\d{2})$/);
-      if (!m || m[1] !== view || m[2] > from || m[3] < to) continue;
+      const m = key.match(/^fc\.cache\.days:(\d{4}-\d{2}-\d{2}):(\d{4}-\d{2}-\d{2})$/);
+      if (!m || m[1] > from || m[2] < to) continue;
       const entry = read(key.slice(PREFIX.length));
       if (entry && (!best || entry.at > best.at)) best = entry;
     }
@@ -62,13 +61,16 @@ export function covering(view, from, to) {
     return null;
   }
   if (!best) return null;
-  const data = best.data;
+  /** @type {Record<string, { days: Array<{ date: string }>, reminders: Array<{ window_start: string, window_end: string }> }>} */
+  const views = best.data.views;
   return {
     at: best.at,
     data: {
-      ...data, from, to,
-      days: data.days.filter((/** @type {{ date: string }} */ d) => d.date >= from && d.date <= to),
-      reminders: data.reminders.filter((/** @type {{ window_start: string, window_end: string }} */ r) => r.window_start <= to && r.window_end >= from),
+      ...best.data, from, to,
+      views: Object.fromEntries(Object.entries(views).map(([view, v]) => [view, {
+        days: v.days.filter((d) => d.date >= from && d.date <= to),
+        reminders: v.reminders.filter((r) => r.window_start <= to && r.window_end >= from),
+      }])),
     },
   };
 }

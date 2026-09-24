@@ -85,11 +85,14 @@ function frame(s) {
 }
 
 /**
- * Draws one screen from its data.
+ * Draws one screen for the chosen filter from the answer holding every filter.
  * @param {State} s
- * @param {import('./views/parts.js').DaysData} data
+ * @param {import('./views/parts.js').AllDays} all
  */
-function draw(s, data) {
+function draw(s, all) {
+  const chosen = all.views[s.view] ?? all.views.FAMILY;
+  /** @type {import('./views/parts.js').DaysData} */
+  const data = { from: all.from, to: all.to, days: chosen.days, reminders: chosen.reminders, pending: all.pending };
   const t = /** @type {import('./views/parts.js').Theme} */ (theme);
   const byDate = new Map(data.days.map((d) => [d.date, d]));
   const openDay = (/** @type {string} */ date) => go({ screen: 'day', date });
@@ -124,8 +127,8 @@ async function show(force = false) {
   $('prev').onclick = () => f.prev && go({ date: f.prev });
   $('next').onclick = () => f.next && go({ date: f.next });
 
-  const key = `days:${s.view}:${f.from}:${f.to}`;
-  const saved = cache.covering(s.view, f.from, f.to);
+  const key = `days:${f.from}:${f.to}`;
+  const saved = cache.covering(f.from, f.to);
   const status = el('p', { class: 'status muted' }, 'Updating…');
   if (saved) {
     showPending(saved.data.pending);
@@ -138,7 +141,7 @@ async function show(force = false) {
     $('main').replaceChildren(el('p', { class: 'muted' }, 'Loading… (the first load of the day can take a few seconds)'));
   }
   try {
-    const r = await call('app.days', { from: f.from, to: f.to, view: s.view });
+    const r = await call('app.days', { from: f.from, to: f.to });
     if (mine !== showing) return;
     if (!r.ok) throw new Error(r.errors.map((e) => e.message).join('; '));
     cache.write(key, r.data);

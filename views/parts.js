@@ -13,7 +13,8 @@ import { el } from '../dom.js';
  * @typedef {{ person: string, period_type: string, kind: 'BREAK' | 'NO_SCHOOL' }} SchoolDay
  * @typedef {{ date: string, weekday: string, items: AppItem[], school: SchoolDay[] }} AppDay
  * @typedef {{ reminder_id: string, title: string, owner: string[], window_start: string, window_end: string }} AppReminder
- * @typedef {{ from: string, to: string, view: string, days: AppDay[], reminders: AppReminder[], pending: number }} DaysData
+ * @typedef {{ from: string, to: string, days: AppDay[], reminders: AppReminder[], pending: number }} DaysData  one filter's days
+ * @typedef {{ from: string, to: string, views: Record<string, { days: AppDay[], reminders: AppReminder[] }>, pending: number }} AllDays
  * @typedef {{ background: string, text: string, bar?: string }} Tone
  * @typedef {{ tones: Record<string, Tone>, icons: Record<string, string>, shades: Record<string, string>,
  *   periodLabels: Record<string, string> }} Theme
