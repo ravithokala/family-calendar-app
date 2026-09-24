@@ -90,6 +90,7 @@ function frame(s) {
  * @param {import('./views/parts.js').AllDays} all
  */
 function draw(s, all) {
+  if (!all.views) throw new AppOutOfDate();
   const chosen = all.views[s.view] ?? all.views.FAMILY;
   /** @type {import('./views/parts.js').DaysData} */
   const data = { from: all.from, to: all.to, days: chosen.days, reminders: chosen.reminders, pending: all.pending };
@@ -106,6 +107,22 @@ function draw(s, all) {
     daySection(t, `Today · ${niceDate(data.from)}`, byDate.get(data.from), { onTitle: () => openDay(data.from) }),
     daySection(t, `Tomorrow · ${niceDate(tomorrow)}`, byDate.get(tomorrow), { onTitle: () => openDay(tomorrow) }),
     remindersOn(data.reminders, data.from));
+}
+
+/** The server answered in a newer shape than this copy of the app understands. */
+class AppOutOfDate extends Error {}
+
+/**
+ * Reloads once to pick up the new app version; a second mismatch in the same session is shown
+ * as an error instead of looping.
+ */
+function reloadForUpdate() {
+  let tried = false;
+  try { tried = sessionStorage.getItem('fc.reloaded') === '1'; sessionStorage.setItem('fc.reloaded', '1'); } catch (e) { /* ignore */ }
+  if (tried) return false;
+  $('main').replaceChildren(el('p', { class: 'muted' }, 'Updating the app…'));
+  navigator.serviceWorker?.getRegistration().then((r) => r?.update()).finally(() => location.reload());
+  return true;
 }
 
 /** Guards against an older request finishing after a newer one. */
@@ -146,11 +163,13 @@ async function show(force = false) {
     if (!r.ok) throw new Error(r.errors.map((e) => e.message).join('; '));
     cache.write(key, r.data);
     showPending(r.data.pending);
+    try { sessionStorage.removeItem('fc.reloaded'); } catch (e) { /* ignore */ }
     const server = lastTiming.server_ms === null ? '' : ` · server ${(lastTiming.server_ms / 1000).toFixed(1)} s`;
     $('main').replaceChildren(draw(s, r.data),
       refreshLink(`Updated ${clock(Date.now())} · ${(lastTiming.total_ms / 1000).toFixed(1)} s${server}`));
   } catch (e) {
     if (mine !== showing) return;
+    if (e instanceof AppOutOfDate && reloadForUpdate()) return;
     const message = `Could not refresh: ${e instanceof Error ? e.message : String(e)}`;
     if (saved) status.textContent = `${message}. Showing ${clock(saved.at)}.`;
     else showError(message);

@@ -4,7 +4,7 @@
  * Caches the app shell only (ADR-078): no calendar data is ever cached here. Requests to other
  * sites (the API, Google sign-in) are left to the network.
  */
-const VERSION = 'shell-v7';
+const VERSION = 'shell-v8';
 const SHELL = ['./', 'index.html', 'app.js', 'api.js', 'auth.js', 'cache.js', 'config.js', 'dom.js', 'views/parts.js', 'views/month.js', 'styles.css',
   'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png', 'icons/apple-touch-icon.png'];
 
@@ -25,10 +25,12 @@ sw.addEventListener('activate', (/** @type {any} */ event) => {
 });
 
 // Network first, so a new version shows straight away; the cache covers going offline.
+// 'no-cache' asks GitHub Pages whether each file changed instead of trusting the browser's
+// ten-minute copy, so the app never runs old files against a newer server.
 sw.addEventListener('fetch', (/** @type {any} */ event) => {
   const url = new URL(event.request.url);
   if (event.request.method !== 'GET' || url.origin !== sw.location.origin) return;
-  event.respondWith(fetch(event.request)
+  event.respondWith(fetch(event.request, { cache: 'no-cache' })
     .then((response) => {
       const copy = response.clone();
       caches.open(VERSION).then((cache) => cache.put(event.request, copy));
