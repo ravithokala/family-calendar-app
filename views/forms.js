@@ -25,16 +25,20 @@ const words = (s) => s.charAt(0) + s.slice(1).toLowerCase().replace(/_/g, ' ');
  * the server keeps the old version as history (ADR-070). With `review`, the form corrects a
  * proposed event and approving it sends only the corrections (ADR-074, ADR-082).
  * @param {FormContext} ctx
- * @param {{ item?: AppItem, date?: string, review?: { heading: string, send: (corrections: Record<string, unknown>) => Promise<ApiResponse> } }} from
+ * With `prefill` (Quick Capture, ADR-083) a new event starts filled in, and `note` says what is still needed.
+ * @param {{ item?: AppItem, date?: string, review?: { heading: string, send: (corrections: Record<string, unknown>) => Promise<ApiResponse> },
+ *   prefill?: Record<string, any>, note?: string }} from
  */
 export function eventSheet(ctx, from) {
   const item = from.item;
   const review = from.review;
+  const p = from.prefill ?? {};
   const e = item?.edit;
   const initial = {
-    title: item?.title ?? null, event_type: item?.event_type ?? 'APPOINTMENT', start_date: e?.start_date ?? from.date ?? null,
-    end_date: e?.end_date ?? null, all_day: e ? Boolean(e.all_day) : true, start_time: item?.start_time ?? null, end_time: item?.end_time ?? null,
-    participants: item?.participants ?? [], related_people: item?.related_people ?? [], location: item?.location ?? null,
+    title: item?.title ?? p.title ?? null, event_type: item?.event_type ?? p.event_type ?? 'APPOINTMENT',
+    start_date: e?.start_date ?? p.start_date ?? from.date ?? null, end_date: e?.end_date ?? p.end_date ?? null,
+    all_day: e ? Boolean(e.all_day) : !p.start_time, start_time: item?.start_time ?? p.start_time ?? null, end_time: item?.end_time ?? p.end_time ?? null,
+    participants: item?.participants ?? p.participants ?? [], related_people: item?.related_people ?? [], location: item?.location ?? null,
     notes: item?.notes ?? null, calendars: e?.calendars ?? [], icon: e?.icon ?? null,
   };
   const f = {
@@ -68,6 +72,7 @@ export function eventSheet(ctx, from) {
   };
 
   const form = el('div', { class: 'form' },
+    from.note ? el('div', { class: 'msg warning' }, from.note) : '',
     field('What', f.title.node),
     el('div', { class: 'row' }, field('Type', f.event_type.node), field('Date', f.start_date.node)),
     f.all_day.node, times,
@@ -100,7 +105,7 @@ export function eventSheet(ctx, from) {
       ctx.saved(item ? `Saved "${v.title}".` : `Added "${v.title}".`, r);
     })));
   const sheet = openSheet(review ? review.heading : item ? 'Edit event' : 'Add event', form);
-  if (!item) f.title.node.focus();
+  if (!item && !from.prefill) f.title.node.focus();
 }
 
 /**
@@ -139,14 +144,15 @@ export function eventDetails(ctx, theme, item, date) {
 /**
  * A new weekly routine, e.g. R's chess on Fridays (ADR-081). Its sessions appear on the next view.
  * @param {FormContext} ctx
+ * @param {{ person?: string, name?: string, category?: string|null, days?: string[], start?: string|null, end?: string|null, note?: string }} [prefill]
  */
-export function routineSheet(ctx) {
+export function routineSheet(ctx, prefill = {}) {
   const f = {
-    person: chips(ctx.meta.participants, [], { single: true }),
-    name: input('text', null, { placeholder: 'as printed, e.g. Chess' }),
-    category: select('OTHER', ctx.meta.categories.map((c) => [c, words(c)])),
-    days: chips(ctx.meta.weekdays.map((d) => d.slice(0, 3)), []),
-    start: input('time', null), end: input('time', null),
+    person: chips(ctx.meta.participants, prefill.person ? [prefill.person] : [], { single: true }),
+    name: input('text', prefill.name ?? null, { placeholder: 'as printed, e.g. Chess' }),
+    category: select(prefill.category ?? 'OTHER', ctx.meta.categories.map((c) => [c, words(c)])),
+    days: chips(ctx.meta.weekdays.map((d) => d.slice(0, 3)), (prefill.days ?? []).map((d) => d.slice(0, 3))),
+    start: input('time', prefill.start ?? null), end: input('time', prefill.end ?? null),
     from: input('date', new Date().toISOString().slice(0, 10)), until: input('date', null),
     termTime: checkbox(false, 'Term time only (not in school holidays)'),
     location: input('text', null),
@@ -157,6 +163,7 @@ export function routineSheet(ctx) {
   f.person.onChange(sync);
   sync();
   const form = el('div', { class: 'form' },
+    prefill.note ? el('div', { class: 'msg warning' }, prefill.note) : '',
     field('Whose', f.person.node), field('Name', f.name.node), field('Kind', f.category.node),
     field('Days', f.days.node), el('div', { class: 'row' }, field('Start', f.start.node), field('End', f.end.node)),
     el('div', { class: 'row' }, field('From', f.from.node), field('Until (optional)', f.until.node)),
@@ -193,16 +200,18 @@ export function routineSheet(ctx) {
  * A reminder: something to do within a window, never an event (ADR-072). Edited in place.
  * @param {FormContext} ctx
  * @param {Reminder} [reminder]
+ * @param {{ title?: string, owner?: string[], related?: string[], from?: string|null, until?: string|null, note?: string }} [prefill]
  */
-export function reminderSheet(ctx, reminder) {
+export function reminderSheet(ctx, reminder, prefill = {}) {
   const f = {
-    title: input('text', reminder?.title ?? null, { placeholder: 'e.g. Book the boiler service' }),
-    owner: chips(ctx.meta.participants, reminder?.owner ?? []),
-    related: chips(ctx.meta.participants, reminder?.related_people ?? []),
-    from: input('date', reminder?.window_start ?? null), until: input('date', reminder?.window_end ?? null),
+    title: input('text', reminder?.title ?? prefill.title ?? null, { placeholder: 'e.g. Book the boiler service' }),
+    owner: chips(ctx.meta.participants, reminder?.owner ?? prefill.owner ?? []),
+    related: chips(ctx.meta.participants, reminder?.related_people ?? prefill.related ?? []),
+    from: input('date', reminder?.window_start ?? prefill.from ?? null), until: input('date', reminder?.window_end ?? prefill.until ?? null),
     notes: input('text', reminder?.notes ?? null),
   };
   const form = el('div', { class: 'form' },
+    prefill.note ? el('div', { class: 'msg warning' }, prefill.note) : '',
     field('What', f.title.node), field('Who does it', f.owner.node), field('About (optional)', f.related.node),
     el('div', { class: 'row' }, field('From', f.from.node), field('By', f.until.node)), field('Notes', f.notes.node),
     el('div', { class: 'actions' }, saveButton(reminder ? 'Save changes' : 'Add reminder', async () => {

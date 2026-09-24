@@ -11,6 +11,7 @@ import { eventSheet, eventDetails, routineSheet, reminderSheet } from './views/f
 import { moreView } from './views/more.js';
 import { reviewView } from './views/review.js';
 import { printSheet } from './views/print.js';
+import { captureBox } from './views/capture.js';
 import { openSheet, toast } from './views/sheet.js';
 import { busy } from './views/fields.js';
 
@@ -330,6 +331,8 @@ function showSignedIn() {
     const s = readState();
     const date = s.screen === 'day' ? s.date : today();
     const menu = openSheet('Add', el('div', { class: 'add-menu' },
+      captureBox(ctx, () => menu.close(), user()),
+      el('div', { class: 'or muted small' }, 'or add by form'),
       el('button', { type: 'button', onclick: () => { menu.close(); eventSheet(ctx, { date }); } }, 'Event'),
       el('button', { type: 'button', onclick: () => { menu.close(); routineSheet(ctx); } }, 'Weekly routine'),
       el('button', { type: 'button', onclick: () => { menu.close(); reminderSheet(ctx); } }, 'Reminder')));
