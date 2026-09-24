@@ -1,8 +1,8 @@
 // @ts-check
 
 import { CONFIG } from './config.js';
-import { init, idToken, isSignedIn, signOut, who } from './auth.js';
-import { call, lastTiming } from './api.js';
+import { init, session, user, signOutOfGoogle } from './auth.js';
+import { call, lastTiming, signOut, sessionKey } from './api.js';
 import { el, isoDate } from './dom.js';
 import * as cache from './cache.js';
 import { todayView } from './views/today.js';
@@ -46,12 +46,10 @@ async function showToday() {
 }
 
 function showSignedIn() {
-  const me = who();
   $('signin').hidden = true;
   $('account').replaceChildren(
-    el('span', { class: 'muted' }, me ? me.name || me.email : ''),
-    el('button', { class: 'link', onclick: () => { signOut(); cache.clear(); location.reload(); } }, 'Sign out'));
-  showToday();
+    el('span', { class: 'muted' }, user() ?? ''),
+    el('button', { class: 'link', onclick: async () => { await signOut(); signOutOfGoogle(); cache.clear(); location.reload(); } }, 'Sign out'));
 }
 
 async function start() {
@@ -60,19 +58,25 @@ async function start() {
     showError('This app is not configured yet (config.js).');
     return;
   }
-  try {
-    await init(CONFIG.clientId, $('signin'));
-  } catch (e) {
-    showError(e instanceof Error ? e.message : String(e));
-    return;
-  }
-  if (isSignedIn()) {
+  // A signed-in phone goes straight to the calendar; Google is only needed to sign in.
+  const initialising = init(CONFIG.clientId, $('signin')).catch((e) => {
+    if (!session()) showError(e instanceof Error ? e.message : String(e));
+  });
+  if (session()) {
     showSignedIn();
+    await showToday();
     return;
   }
   $('main').replaceChildren(el('p', { class: 'muted' }, 'Sign in with your Google account to see the calendar.'));
-  await idToken();
+  await initialising;
+  try {
+    await sessionKey();
+  } catch (e) {
+    showError(`Could not sign in: ${e instanceof Error ? e.message : String(e)}`);
+    return;
+  }
   showSignedIn();
+  await showToday();
 }
 
 start();
