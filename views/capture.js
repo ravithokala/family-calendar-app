@@ -55,6 +55,55 @@ function openFor(ctx, p, targets, me) {
 }
 
 /**
+ * A 🎤 button that fills the box by speech, using the browser's own speech recognition (Chrome on
+ * Android, recent Safari). Only shown where the browser supports it; the keyboard's own mic works
+ * everywhere (ADR-041). The browser sends the audio to its speech service (Google or Apple); the app
+ * keeps no audio.
+ * @param {HTMLTextAreaElement} box
+ * @returns {HTMLElement|null}
+ */
+function micButton(box) {
+  const w = /** @type {any} */ (window);
+  const Recognition = w.SpeechRecognition ?? w.webkitSpeechRecognition;
+  if (!Recognition) return null;
+  const button = /** @type {HTMLButtonElement} */ (el('button', { class: 'mic', type: 'button', 'aria-label': 'Speak' }, '🎤'));
+  /** @type {any} */
+  let listening = null;
+  const stop = () => {
+    listening = null;
+    button.classList.remove('on');
+    button.textContent = '🎤';
+  };
+  button.addEventListener('click', () => {
+    if (listening) { listening.stop(); return; }
+    const r = new Recognition();
+    r.lang = 'en-GB';
+    r.interimResults = true;
+    r.continuous = false;
+    const before = box.value.trim();
+    r.onresult = (/** @type {any} */ e) => {
+      const heard = [...e.results].map((res) => res[0].transcript).join(' ').trim();
+      box.value = [before, heard].filter(Boolean).join(' ');
+    };
+    r.onerror = (/** @type {any} */ e) => {
+      if (e.error === 'not-allowed' || e.error === 'service-not-allowed') toast('Microphone not allowed. Allow it for this app, or use the keyboard\'s mic.');
+      else if (e.error !== 'no-speech' && e.error !== 'aborted') toast(`Could not listen (${e.error}). Try the keyboard's mic.`);
+    };
+    r.onend = stop;
+    try {
+      r.start();
+      listening = r;
+      button.classList.add('on');
+      button.textContent = '■';
+    } catch (err) {
+      stop();
+      toast("Could not start listening. Try the keyboard's mic.");
+    }
+  });
+  return button;
+}
+
+/**
  * The Quick Capture box, for the top of the Add sheet.
  * @param {import('./forms.js').FormContext} ctx
  * @param {() => void} close  closes the Add sheet
@@ -77,5 +126,5 @@ export function captureBox(ctx, close, me) {
   go.addEventListener('click', run);
   box.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); run(); } });
   setTimeout(() => box.focus(), 50);
-  return el('div', { class: 'capture' }, el('label', { class: 'capture-label' }, 'Quick capture'), el('div', { class: 'capture-row' }, box, go));
+  return el('div', { class: 'capture' }, el('label', { class: 'capture-label' }, 'Quick capture'), el('div', { class: 'capture-row' }, box, micButton(box), go));
 }
