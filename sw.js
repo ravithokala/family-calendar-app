@@ -1,0 +1,38 @@
+// @ts-check
+
+/**
+ * Caches the app shell only (ADR-078): no calendar data is ever cached here. Requests to other
+ * sites (the API, Google sign-in) are left to the network.
+ */
+const VERSION = 'shell-v1';
+const SHELL = ['./', 'index.html', 'app.js', 'api.js', 'auth.js', 'config.js', 'dom.js', 'views/today.js', 'styles.css',
+  'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png', 'icons/apple-touch-icon.png'];
+
+/**
+ * The worker's global scope. Typed loosely: the DOM and WebWorker type libraries cannot be combined.
+ * @type {any}
+ */
+const sw = self;
+
+sw.addEventListener('install', (/** @type {any} */ event) => {
+  event.waitUntil(caches.open(VERSION).then((cache) => cache.addAll(SHELL)).then(() => sw.skipWaiting()));
+});
+
+sw.addEventListener('activate', (/** @type {any} */ event) => {
+  event.waitUntil(caches.keys()
+    .then((keys) => Promise.all(keys.filter((k) => k !== VERSION).map((k) => caches.delete(k))))
+    .then(() => sw.clients.claim()));
+});
+
+// Network first, so a new version shows straight away; the cache covers going offline.
+sw.addEventListener('fetch', (/** @type {any} */ event) => {
+  const url = new URL(event.request.url);
+  if (event.request.method !== 'GET' || url.origin !== sw.location.origin) return;
+  event.respondWith(fetch(event.request)
+    .then((response) => {
+      const copy = response.clone();
+      caches.open(VERSION).then((cache) => cache.put(event.request, copy));
+      return response;
+    })
+    .catch(() => caches.match(event.request).then((hit) => hit ?? Response.error())));
+});
