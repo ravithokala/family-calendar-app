@@ -28,7 +28,7 @@ button.link { background: none; border: 0; padding: 4px 6px; color: var(--accent
 #signin { display: flex; justify-content: center; padding: 16px; }
 main { padding: 8px 12px calc(76px + env(safe-area-inset-bottom)); max-width: 820px; margin: 0 auto; }
 
-#tabs { position: fixed; left: 0; right: 0; bottom: 0; z-index: 2; display: grid; grid-template-columns: repeat(4, 1fr);
+#tabs { position: fixed; left: 0; right: 0; bottom: 0; z-index: 2; display: grid; grid-template-columns: repeat(5, 1fr);
   background: var(--bg); border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom); }
 #tabs:empty { display: none; }
 #tabs button { border: 0; background: none; padding: 12px 0; font-size: 14px; color: var(--muted); cursor: pointer; }
@@ -41,6 +41,8 @@ main { padding: 8px 12px calc(76px + env(safe-area-inset-bottom)); max-width: 82
 .cell { display: flex; flex-direction: column; gap: 2px; align-items: stretch; min-height: 84px; padding: 2px; text-align: left;
   border: 0; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); background: var(--bg); cursor: pointer; overflow: hidden; }
 .cell.outside { opacity: 0.45; }
+/* Shaded days use the printed pale colours, so their numbers stay dark in dark mode too. */
+.cell.shaded .num, .cell.shaded .more { color: #22252A; }
 .cell .num { font-size: 12px; font-weight: 600; padding: 0 2px; }
 .cell.today .num { background: var(--today); color: var(--bg); border-radius: 10px; align-self: flex-start; padding: 0 6px; }
 .chip { display: flex; align-items: center; gap: 2px; font-size: 10px; line-height: 1.25; padding: 1px 3px; border-radius: 3px;
@@ -64,3 +66,52 @@ main { padding: 8px 12px calc(76px + env(safe-area-inset-bottom)); max-width: 82
 .muted { color: var(--muted); }
 .error { color: var(--bad); }
 .status { font-size: 12px; margin-top: 18px; }
+
+/* Adding and editing (ADR-081) */
+.fab { position: fixed; right: 16px; bottom: calc(64px + env(safe-area-inset-bottom)); z-index: 3; width: 56px; height: 56px; border-radius: 28px;
+  border: 0; background: var(--accent); color: var(--bg); font-size: 30px; line-height: 1; box-shadow: 0 4px 14px rgba(0,0,0,0.25); cursor: pointer; }
+.item.tappable { cursor: pointer; }
+.item.tappable:active { background: var(--soft); }
+.sheet { border: 0; padding: 0; margin: auto 0 0; width: 100%; max-width: 100%; max-height: 92vh; border-radius: 16px 16px 0 0;
+  background: var(--bg); color: var(--text); box-shadow: 0 -8px 30px rgba(0,0,0,0.25); }
+@media (min-width: 600px) { .sheet { margin: auto; width: min(560px, 94vw); border-radius: 14px; } }
+.sheet::backdrop { background: rgba(0,0,0,0.35); }
+.sheet-head { position: sticky; top: 0; display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 14px 16px 8px; background: var(--bg); border-bottom: 1px solid var(--line); }
+.sheet-head h2 { margin: 0; font-size: 17px; }
+.form { display: flex; flex-direction: column; gap: 12px; padding: 12px 16px calc(20px + env(safe-area-inset-bottom)); }
+.field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+.field input, .field select { font: inherit; font-size: 16px; color: var(--text); background: var(--bg); padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; width: 100%; }
+.row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.check { display: flex; align-items: center; gap: 8px; font-size: 15px; }
+.check input { width: 20px; height: 20px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chips button { border: 1px solid var(--line); background: var(--bg); border-radius: 16px; padding: 6px 14px; font-size: 15px; cursor: pointer; }
+.chips button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--bg); font-weight: 600; }
+.more-fields summary { color: var(--accent); cursor: pointer; font-size: 14px; }
+.more-fields[open] { display: flex; flex-direction: column; gap: 12px; }
+.actions { display: flex; gap: 10px; margin-top: 4px; }
+.actions button { flex: 1; font-size: 16px; padding: 12px; border-radius: 10px; cursor: pointer; }
+button.primary { background: var(--accent); color: var(--bg); border: 0; font-weight: 600; }
+button.danger { background: var(--bg); color: var(--bad); border: 1px solid var(--bad); }
+button:disabled { opacity: 0.6; }
+.danger-text { color: var(--bad) !important; }
+.messages { padding: 0 16px; }
+.messages:empty { display: none; }
+.msg { margin-top: 10px; padding: 8px 10px; border-radius: 8px; font-size: 14px; }
+.msg.error { background: #FBE9E7; color: #B3261E; }
+.msg.warning { background: var(--notice-bg); color: var(--notice); }
+.details-list { display: grid; grid-template-columns: 70px 1fr; gap: 6px 10px; margin: 0; }
+.details-list dt { color: var(--muted); font-size: 14px; }
+.details-list dd { margin: 0; }
+.add-menu { display: flex; flex-direction: column; gap: 10px; padding: 16px 16px calc(24px + env(safe-area-inset-bottom)); }
+.add-menu button { font-size: 17px; padding: 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--soft); cursor: pointer; text-align: left; }
+.cancelled h3 { font-size: 13px; color: var(--muted); margin: 14px 0 2px; }
+.cancelled s { color: var(--muted); }
+.section-head { display: flex; align-items: center; justify-content: space-between; }
+.section-head h2 { font-size: 15px; margin: 16px 0 6px; color: var(--muted); }
+.row-actions { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 2px; }
+.small { font-size: 13px; }
+#toast { position: fixed; left: 12px; right: 12px; bottom: calc(132px + env(safe-area-inset-bottom)); z-index: 4; background: var(--text); color: var(--bg);
+  padding: 10px 14px; border-radius: 10px; font-size: 14px; box-shadow: 0 4px 14px rgba(0,0,0,0.25); }
+#toast .warn { margin-top: 6px; color: #F2D58A; }

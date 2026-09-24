@@ -7,23 +7,28 @@ import { el, isoDate, addDays, addMonths, mondayOf, niceDate, longDate, monthTit
 import * as cache from './cache.js';
 import { daySection, remindersOn } from './views/parts.js';
 import { monthView, monthRange } from './views/month.js';
+import { eventSheet, eventDetails, routineSheet, reminderSheet } from './views/forms.js';
+import { moreView } from './views/more.js';
+import { openSheet, toast } from './views/sheet.js';
 
 /**
  * The family app (ADR-078, ADR-080). It holds no calendar rules and no family data: everything
  * shown comes from the server after sign-in. Screens: Today, Month (default), Week, Day, each for
  * one filter (Family, C, R, RT, G). The screen lives in the address, so Back works.
  *
- * @typedef {'today' | 'month' | 'week' | 'day'} Screen
+ * @typedef {'today' | 'month' | 'week' | 'day' | 'more'} Screen
  * @typedef {{ screen: Screen, date: string, view: string }} State
  */
 
 const $ = (/** @type {string} */ id) => /** @type {HTMLElement} */ (document.getElementById(id));
-const SCREENS = /** @type {Screen[]} */ (['today', 'month', 'week', 'day']);
+const SCREENS = /** @type {Screen[]} */ (['today', 'month', 'week', 'day', 'more']);
 const VIEW_KEY = 'fc.view';
 /** @type {import('./views/parts.js').Theme|null} */
 let theme = null;
 /** @type {string[]} */
 let views = ['FAMILY'];
+/** @type {any} */
+let meta = null;
 
 const today = () => isoDate(new Date());
 
@@ -45,6 +50,21 @@ function go(change) {
   try { localStorage.setItem(VIEW_KEY, next.view); } catch (e) { /* ignore */ }
   location.hash = `#/${next.screen}/${next.date}/${next.view}`;
 }
+
+ /**
+ * What the forms need: the vocabularies, the API, and what to do after a save: forget saved
+ * screens (they are out of date now), redraw from the server, and say what happened.
+ * @returns {import('./views/forms.js').FormContext}
+ */
+const formContext = () => ({
+  meta,
+  call,
+  saved: (message, r) => {
+    cache.clearDays();
+    toast(message, r.warnings);
+    show(true);
+  },
+});
 
 /** @param {number} at */
 const clock = (at) => new Date(at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
@@ -71,6 +91,7 @@ function showPending(count) {
  * @param {State} s
  */
 function frame(s) {
+  if (s.screen === 'more') return { from: '', to: '', title: 'More', prev: null, next: null };
   if (s.screen === 'month') {
     const start = `${s.date.slice(0, 7)}-01`;
     return { ...monthRange(start), title: monthTitle(start), prev: addMonths(start, -1), next: addMonths(start, 1) };
@@ -97,15 +118,28 @@ function draw(s, all) {
   const t = /** @type {import('./views/parts.js').Theme} */ (theme);
   const byDate = new Map(data.days.map((d) => [d.date, d]));
   const openDay = (/** @type {string} */ date) => go({ screen: 'day', date });
+  const ctx = formContext();
+  /** @param {string} date */
+  const onItem = (date) => (/** @type {import('./views/parts.js').AppItem} */ item) => eventDetails(ctx, t, item, date);
+  const onRestore = async (/** @type {import('./views/parts.js').CancelledItem} */ c) => {
+    const r = await call('events.restore', { event_id: c.event_id });
+    if (r.ok) ctx.saved(`Restored "${c.title}".`, r);
+    else toast(r.errors.map((e) => e.message).join('; '));
+  };
   if (s.screen === 'month') return monthView(t, data, `${s.date.slice(0, 7)}-01`, today(), openDay);
   if (s.screen === 'week') {
-    return el('div', {}, data.days.map((d) => daySection(t, niceDate(d.date), d, { onTitle: () => openDay(d.date) })));
+    return el('div', {}, data.days.map((d) => daySection(t, niceDate(d.date), d, { onTitle: () => openDay(d.date), onItem: onItem(d.date) })));
   }
-  if (s.screen === 'day') return el('div', {}, daySection(t, 'Events', byDate.get(s.date)), remindersOn(data.reminders, s.date));
+  if (s.screen === 'day') {
+    return el('div', {},
+      daySection(t, 'Events', byDate.get(s.date), { onItem: onItem(s.date), onRestore: s.view === 'FAMILY' ? onRestore : undefined }),
+      remindersOn(data.reminders, s.date),
+      s.view === 'FAMILY' ? '' : el('p', { class: 'muted small' }, 'Cancelled events can be restored from the Family view.'));
+  }
   const tomorrow = addDays(data.from, 1);
   return el('div', {},
-    daySection(t, `Today · ${niceDate(data.from)}`, byDate.get(data.from), { onTitle: () => openDay(data.from) }),
-    daySection(t, `Tomorrow · ${niceDate(tomorrow)}`, byDate.get(tomorrow), { onTitle: () => openDay(tomorrow) }),
+    daySection(t, `Today · ${niceDate(data.from)}`, byDate.get(data.from), { onTitle: () => openDay(data.from), onItem: onItem(data.from) }),
+    daySection(t, `Tomorrow · ${niceDate(tomorrow)}`, byDate.get(tomorrow), { onTitle: () => openDay(tomorrow), onItem: onItem(tomorrow) }),
     remindersOn(data.reminders, data.from));
 }
 
@@ -143,6 +177,12 @@ async function show(force = false) {
   $('next').hidden = f.next === null;
   $('prev').onclick = () => f.prev && go({ date: f.prev });
   $('next').onclick = () => f.next && go({ date: f.next });
+  $('filters').hidden = s.screen === 'more';
+  if (s.screen === 'more') {
+    $('today-button').hidden = true;
+    await showMore(mine);
+    return;
+  }
 
   const key = `days:${f.from}:${f.to}`;
   const saved = cache.covering(f.from, f.to);
@@ -176,10 +216,32 @@ async function show(force = false) {
   }
 }
 
+/**
+ * The More screen, from its own two lists (saved copy first, as with the calendar).
+ * @param {number} mine
+ */
+async function showMore(mine) {
+  const saved = cache.read('more');
+  const draw = (/** @type {any} */ data) => moreView(formContext(), data);
+  if (saved) $('main').replaceChildren(draw(saved.data), el('p', { class: 'status muted' }, 'Updating…'));
+  else $('main').replaceChildren(el('p', { class: 'muted' }, 'Loading…'));
+  try {
+    const [reminders, routines] = await Promise.all([call('reminders.list'), call('routines.list')]);
+    if (mine !== showing) return;
+    if (!reminders.ok || !routines.ok) throw new Error([...reminders.errors, ...routines.errors].map((e) => e.message).join('; '));
+    const data = { reminders: reminders.data.reminders, activities: routines.data.activities, schedules: routines.data.schedules };
+    cache.write('more', data);
+    $('main').replaceChildren(draw(data), refreshLink(`Updated ${clock(Date.now())}`));
+  } catch (e) {
+    if (mine !== showing) return;
+    showError(`Could not load: ${e instanceof Error ? e.message : String(e)}`);
+  }
+}
+
 /** The theme and filters, cached so the calendar can draw before the server answers. */
 async function loadMeta() {
   const saved = cache.read('meta');
-  const apply = (/** @type {any} */ m) => { theme = m.theme; views = m.views; };
+  const apply = (/** @type {any} */ m) => { theme = m.theme; views = m.views; meta = m; };
   if (saved) {
     apply(saved.data);
     call('meta.get').then((r) => { if (r.ok) cache.write('meta', r.data); }).catch(() => { /* next time */ });
@@ -203,6 +265,16 @@ function showSignedIn() {
     onclick: () => go({ screen, date: screen === 'today' ? today() : readState().date }),
   }, screen[0].toUpperCase() + screen.slice(1))));
   $('today-button').onclick = () => go({ date: today() });
+  $('add').hidden = false;
+  $('add').onclick = () => {
+    const ctx = formContext();
+    const s = readState();
+    const date = s.screen === 'day' ? s.date : today();
+    const menu = openSheet('Add', el('div', { class: 'add-menu' },
+      el('button', { type: 'button', onclick: () => { menu.close(); eventSheet(ctx, { date }); } }, 'Event'),
+      el('button', { type: 'button', onclick: () => { menu.close(); routineSheet(ctx); } }, 'Weekly routine'),
+      el('button', { type: 'button', onclick: () => { menu.close(); reminderSheet(ctx); } }, 'Reminder')));
+  };
   window.addEventListener('hashchange', () => show());
 }
 

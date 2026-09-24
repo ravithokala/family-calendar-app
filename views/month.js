@@ -23,7 +23,7 @@ export function monthView(theme, data, monthStart, today, openDay) {
     const shown = extra > 0 ? day.items.slice(0, FITS - 1) : day.items;
     const background = shade(theme, day.school);
     return el('button', {
-      class: `cell${day.date.slice(0, 7) === month ? '' : ' outside'}${day.date === today ? ' today' : ''}`,
+      class: `cell${day.date.slice(0, 7) === month ? '' : ' outside'}${day.date === today ? ' today' : ''}${background ? ' shaded' : ''}`,
       style: background ? { background } : {},
       onclick: () => openDay(day.date),
       'aria-label': `${day.date}: ${day.items.length} item${day.items.length === 1 ? '' : 's'}`,
