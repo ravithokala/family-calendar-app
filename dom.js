@@ -55,3 +55,5 @@ export const niceDate = (iso) => format(iso, { weekday: 'short', day: 'numeric',
 export const longDate = (iso) => format(iso, { weekday: 'long', day: 'numeric', month: 'long' });
 /** e.g. "October 2026" @param {string} iso */
 export const monthTitle = (iso) => format(iso, { month: 'long', year: 'numeric' });
+/** e.g. "31 Aug 2027" @param {string} iso */
+export const fullDate = (iso) => format(iso, { day: 'numeric', month: 'short', year: 'numeric' });

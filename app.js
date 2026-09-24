@@ -258,14 +258,15 @@ async function showMore(mine) {
   if (savedView) $('main').replaceChildren(savedView, el('p', { class: 'status muted' }, 'Updating…'));
   else $('main').replaceChildren(el('p', { class: 'muted' }, 'Loading…'));
   try {
-    const [reminders, routines, sources, count] = await Promise.all([call('reminders.list'), call('routines.list'), call('sources.list'), call('review.count')]);
+    const [reminders, routines, sources, count, schools] = await Promise.all([
+      call('reminders.list'), call('routines.list'), call('sources.list'), call('review.count'), call('schools.list')]);
     if (mine !== showing) return;
-    if (!reminders.ok || !routines.ok || !sources.ok) {
-      throw new Error([...reminders.errors, ...routines.errors, ...sources.errors].map((e) => e.message).join('; '));
+    if (!reminders.ok || !routines.ok || !sources.ok || !schools.ok) {
+      throw new Error([...reminders.errors, ...routines.errors, ...sources.errors, ...schools.errors].map((e) => e.message).join('; '));
     }
     const pending = count.ok ? count.data.count : Number($('pending').dataset.count ?? 0);
     showPending(pending);
-    const data = { reminders: reminders.data.reminders, activities: routines.data.activities, schedules: routines.data.schedules, sources: sources.data.sources, pending };
+    const data = { reminders: reminders.data.reminders, activities: routines.data.activities, schedules: routines.data.schedules, sources: sources.data.sources, pending, periods: schools.data.periods };
     cache.write('more', data);
     $('main').replaceChildren(draw(data), refreshLink(`Updated ${clock(Date.now())}`));
   } catch (e) {

@@ -4,16 +4,20 @@ import { el, niceDate } from '../dom.js';
 import { reminderSheet, routineSheet } from './forms.js';
 import { showIssues } from './sheet.js';
 import { busy } from './fields.js';
+
 import { VERSION } from '../version.js';
 import { sourceSheet, recentSources } from './sources.js';
 import { printSheet } from './print.js';
+import { schoolsSection } from './schools.js';
+import { openSheet } from './sheet.js';
+import { field, select, saveButton } from './fields.js';
 
 /**
  * The More screen: review and sources, printing, reminders (add, edit, done, cancel, reopen) and
  * routines (list, add).
  * @param {import('./forms.js').FormContext} ctx
  * @param {{ reminders: import('./forms.js').Reminder[], activities: any[], schedules: any[],
- *   sources: import('./sources.js').SourceSummary[], pending: number }} data
+ *   sources: import('./sources.js').SourceSummary[], pending: number, periods: import('./schools.js').Period[] }} data
  * @param {{ openReview: () => void, today: string }} nav
  */
 export function moreView(ctx, data, nav) {
@@ -41,6 +45,20 @@ export function moreView(ctx, data, nav) {
         : el('div', { class: 'row-actions' }, el('span', { class: 'muted' }, r.status.toLowerCase()),
           el('button', { class: 'link', type: 'button', onclick: setStatus(r, 'ACTIVE', `Reopened "${r.title}".`) }, 'Reopen'))));
 
+  /**
+   * A routine's drawn icon, as on the printed calendar (ADR-068).
+   * @param {any} a
+   */
+  const iconSheet = (a) => {
+    const icon = select(a.icon ?? '', [['', '(from its kind)'], ...ctx.meta.icons.map((i) => /** @type {[string, string]} */ ([i, i]))]);
+    const sheet = openSheet(`${a.person} - ${a.name}`, el('div', { class: 'form' }, field('Icon', icon.node),
+      el('div', { class: 'actions' }, saveButton('Save icon', async () => {
+        const r = await ctx.call('routines.setIcon', { activity_id: a.activity_id, icon: icon.get() });
+        if (!r.ok) { showIssues(sheet.messages, r); return; }
+        sheet.close();
+        ctx.saved(`Icon saved for ${a.person} ${a.name}.`, r);
+      }))));
+  };
   const scheduleText = (/** @type {any} */ s) => (s.schedule_type === 'EXPLICIT_DATES'
     ? `published dates to ${niceDate(s.valid_to)}`
     : `${s.day_of_week.map((/** @type {string} */ d) => d.slice(0, 3).toLowerCase()).join(', ')}${s.valid_to ? ` until ${niceDate(s.valid_to)}` : ''}`);
@@ -66,7 +84,7 @@ export function moreView(ctx, data, nav) {
     el('section', {},
       el('div', { class: 'section-head' }, el('h2', {}, 'Routines'),
         el('button', { class: 'link', type: 'button', onclick: () => routineSheet(ctx) }, '+ Add')),
-      el('ul', { class: 'items' }, routines.map((a) => el('li', { class: 'item' },
+      el('ul', { class: 'items' }, routines.map((a) => el('li', { class: 'item tappable', onclick: () => iconSheet(a) },
         el('span', { class: 'time' }, a.default_start_time ? `${a.default_start_time}${a.default_end_time ? `–${a.default_end_time}` : ''}` : ''),
         el('div', { class: 'body' },
           el('div', {}, `${a.person} - ${a.name}`),
@@ -74,6 +92,7 @@ export function moreView(ctx, data, nav) {
             ...data.schedules.filter((s) => s.activity_id === a.activity_id && s.status === 'ACTIVE').map(scheduleText),
             a.term_time_only ? 'term time' : '',
           ].filter(Boolean).join(' · ')))))),
-      el('p', { class: 'muted small' }, 'Changing or ending a routine is not available yet.')),
+      el('p', { class: 'muted small' }, 'Tap a routine to change its icon. Changing or ending a routine is not available yet.')),
+    schoolsSection(ctx, data.periods, nav.today),
     el('p', { class: 'muted small version' }, `Family Cal · version ${VERSION}`));
 }

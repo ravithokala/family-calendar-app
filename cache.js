@@ -8,7 +8,7 @@
  * Bump FORMAT whenever a saved answer's shape changes: copies saved by an older app version are then
  * ignored and removed instead of being drawn wrongly (RT, 2026-09-24: the More tab broke on update).
  */
-const FORMAT = 2;
+const FORMAT = 3;
 const ROOT = 'fc.cache.';
 const PREFIX = `${ROOT}v${FORMAT}.`;
 

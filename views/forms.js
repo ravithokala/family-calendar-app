@@ -10,7 +10,7 @@ import { timeText } from './parts.js';
  * the web page, which validate it, keep history and warn about clashes.
  *
  * @typedef {import('../api.js').ApiResponse} ApiResponse
- * @typedef {{ participants: string[], children: string[], eventTypes: string[], categories: string[], icons: string[],
+ * @typedef {{ participants: string[], children: string[], eventTypes: string[], categories: string[], icons: string[], periodTypes: string[],
  *   weekdays: string[], schools: Array<{ school_id: string, school_name: string, person: string }> }} Meta
  * @typedef {{ meta: Meta, call: (action: string, payload?: unknown) => Promise<ApiResponse>,
  *   saved: (message: string, r: ApiResponse) => void }} FormContext

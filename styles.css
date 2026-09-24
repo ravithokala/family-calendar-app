@@ -142,3 +142,9 @@ textarea.prompt { font: 12px/1.35 ui-monospace, Menlo, Consolas, monospace; back
 .capture-row textarea { flex: 1; font-size: 16px; resize: none; }
 .capture-row button { font-size: 16px; padding: 0 18px; border-radius: 10px; cursor: pointer; }
 .or { text-align: center; margin: 4px 0; }
+
+/* School dates (ADR-084) */
+.school { border-bottom: 1px solid var(--line); padding: 8px 0; }
+.school summary { cursor: pointer; }
+.period { display: grid; grid-template-columns: 1.2fr 1fr 1fr auto; gap: 6px; margin-bottom: 6px; align-items: center; }
+.period select, .period input { font: inherit; font-size: 14px; padding: 6px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--text); min-width: 0; }
