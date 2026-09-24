@@ -13,7 +13,7 @@ import { timeText } from './parts.js';
  * @typedef {{ participants: string[], children: string[], eventTypes: string[], categories: string[], icons: string[], periodTypes: string[],
  *   weekdays: string[], schools: Array<{ school_id: string, school_name: string, person: string }> }} Meta
  * @typedef {{ meta: Meta, call: (action: string, payload?: unknown) => Promise<ApiResponse>,
- *   saved: (message: string, r: ApiResponse) => void }} FormContext
+ *   saved: (message: string, r: ApiResponse) => void, openList?: (listId: string) => void }} FormContext
  * @typedef {import('./parts.js').AppItem} AppItem
  */
 
@@ -128,6 +128,9 @@ export function eventDetails(ctx, theme, item, date) {
   ].filter(([, v]) => v);
   const body = el('div', { class: 'form' },
     el('dl', { class: 'details-list' }, rows.map(([k, v]) => [el('dt', {}, k), el('dd', {}, v)])),
+    // Lists attached to this event, e.g. the party's to-do list (ADR-085).
+    (item.lists ?? []).map((l) => el('button', { class: 'wide-button', type: 'button', onclick: () => { sheet.close(); ctx.openList?.(l.list_id); } },
+      `☑ ${l.title} · ${l.total ? `${l.done} of ${l.total} done` : 'empty'}`)),
     el('div', { class: 'actions' },
       el('button', { class: 'primary', type: 'button', onclick: () => { sheet.close(); eventSheet(ctx, { item }); } }, 'Edit'),
       el('button', { class: 'danger', type: 'button', onclick: async (/** @type {Event} */ ev) => {

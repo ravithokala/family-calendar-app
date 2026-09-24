@@ -8,7 +8,7 @@
  * Bump FORMAT whenever a saved answer's shape changes: copies saved by an older app version are then
  * ignored and removed instead of being drawn wrongly (RT, 2026-09-24: the More tab broke on update).
  */
-const FORMAT = 3;
+const FORMAT = 4;
 const ROOT = 'fc.cache.';
 const PREFIX = `${ROOT}v${FORMAT}.`;
 
@@ -73,13 +73,15 @@ export function covering(from, to) {
     return null;
   }
   if (!best) return null;
-  /** @type {Record<string, { days: Array<{ date: string }>, reminders: Array<{ window_start: string, window_end: string }> }>} */
+  /** @type {Record<string, { days: Array<{ date: string }>, reminders: Array<{ window_start: string, window_end: string }>, todos?: unknown[] }>} */
   const views = best.data.views;
   return {
     at: best.at,
     data: {
       ...best.data, from, to,
+      // Everything else a view carries (e.g. list to-dos, overdue ones included) is kept as it is.
       views: Object.fromEntries(Object.entries(views).map(([view, v]) => [view, {
+        ...v,
         days: v.days.filter((d) => d.date >= from && d.date <= to),
         reminders: v.reminders.filter((r) => r.window_start <= to && r.window_end >= from),
       }])),
@@ -90,7 +92,14 @@ export function covering(from, to) {
 /** Forgets every saved calendar range and the More lists, e.g. after a change. */
 export function clearDays() {
   try {
-    Object.keys(localStorage).filter((k) => k.startsWith(`${PREFIX}days:`) || k === `${PREFIX}more` || k === `${PREFIX}review`)
+    Object.keys(localStorage).filter((k) => k.startsWith(`${PREFIX}days:`) || k === `${PREFIX}more` || k === `${PREFIX}review` || k === `${PREFIX}lists`)
       .forEach((k) => localStorage.removeItem(k));
+  } catch (e) { /* ignore */ }
+}
+
+/** Forgets saved calendar months only, e.g. after a list change that shows under "To do" (ADR-085). */
+export function clearCalendar() {
+  try {
+    Object.keys(localStorage).filter((k) => k.startsWith(`${PREFIX}days:`)).forEach((k) => localStorage.removeItem(k));
   } catch (e) { /* ignore */ }
 }

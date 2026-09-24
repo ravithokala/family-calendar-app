@@ -5,13 +5,14 @@ import { init, session, user, signOutOfGoogle } from './auth.js';
 import { call, lastTiming, signOut, sessionKey } from './api.js';
 import { el, isoDate, addDays, addMonths, mondayOf, niceDate, longDate, monthTitle } from './dom.js';
 import * as cache from './cache.js';
-import { daySection, remindersOn } from './views/parts.js';
+import { daySection, remindersOn, todoSection } from './views/parts.js';
 import { monthView, monthRange, fetchRangeFor } from './views/month.js';
 import { eventSheet, eventDetails, routineSheet, reminderSheet } from './views/forms.js';
 import { moreView } from './views/more.js';
 import { reviewView } from './views/review.js';
 import { printSheet } from './views/print.js';
 import { captureBox } from './views/capture.js';
+import { listsOverview, listDetail } from './views/lists.js';
 import { openSheet, toast } from './views/sheet.js';
 import { busy } from './views/fields.js';
 
@@ -20,14 +21,17 @@ import { busy } from './views/fields.js';
  * shown comes from the server after sign-in. Screens: Today, Month (default), Week, Day, each for
  * one filter (Family, C, R, RT, G). The screen lives in the address, so Back works.
  *
- * @typedef {'today' | 'month' | 'week' | 'day' | 'more' | 'review'} Screen
- * @typedef {{ screen: Screen, date: string, view: string }} State
+ * @typedef {'today' | 'month' | 'week' | 'day' | 'lists' | 'more' | 'review'} Screen
+ * @typedef {{ screen: Screen, date: string, view: string, list: string|null }} State
  */
 
 const $ = (/** @type {string} */ id) => /** @type {HTMLElement} */ (document.getElementById(id));
-const SCREENS = /** @type {Screen[]} */ (['today', 'month', 'week', 'day', 'more', 'review']);
-/** The bottom bar; Review is reached from the badge and from More. */
-const TABS = SCREENS.filter((s) => s !== 'review');
+const SCREENS = /** @type {Screen[]} */ (['today', 'month', 'week', 'day', 'lists', 'more', 'review']);
+/**
+ * The bottom bar (RT, 2026-09-24: Lists replaces Day). Day is reached by tapping a day in Month or
+ * Week; Review from the badge and More.
+ */
+const TABS = /** @type {Screen[]} */ (['today', 'month', 'week', 'lists', 'more']);
 const VIEW_KEY = 'fc.view';
 /** @type {import('./views/parts.js').Theme|null} */
 let theme = null;
@@ -40,13 +44,14 @@ const today = () => isoDate(new Date());
 
 /** @returns {State} */
 function readState() {
-  const [screen, date, view] = location.hash.replace(/^#\/?/, '').split('/');
+  const [screen, date, view, list] = location.hash.replace(/^#\/?/, '').split('/');
   let saved = 'FAMILY';
   try { saved = localStorage.getItem(VIEW_KEY) ?? 'FAMILY'; } catch (e) { /* ignore */ }
   return {
     screen: SCREENS.includes(/** @type {Screen} */ (screen)) ? /** @type {Screen} */ (screen) : 'month',
     date: /^\d{4}-\d{2}-\d{2}$/.test(date ?? '') ? date : today(),
     view: views.includes(view) ? view : views.includes(saved) ? saved : 'FAMILY',
+    list: /^[\w-]+$/.test(list ?? '') ? list : null,
   };
 }
 
@@ -54,7 +59,7 @@ function readState() {
 function go(change) {
   const next = { ...readState(), ...change };
   try { localStorage.setItem(VIEW_KEY, next.view); } catch (e) { /* ignore */ }
-  location.hash = `#/${next.screen}/${next.date}/${next.view}`;
+  location.hash = `#/${next.screen}/${next.date}/${next.view}${next.screen === 'lists' && next.list ? `/${next.list}` : ''}`;
 }
 
  /**
@@ -65,6 +70,7 @@ function go(change) {
 const formContext = () => ({
   meta,
   call,
+  openList: (/** @type {string} */ listId) => go({ screen: 'lists', list: listId }),
   saved: (message, r) => {
     cache.clearDays();
     toast(message, r.warnings);
@@ -100,6 +106,7 @@ function showPending(count) {
 function frame(s) {
   if (s.screen === 'more') return { from: '', to: '', title: 'More', prev: null, next: null };
   if (s.screen === 'review') return { from: '', to: '', title: 'Review', prev: null, next: null };
+  if (s.screen === 'lists') return { from: '', to: '', title: 'Lists', prev: null, next: null };
   if (s.screen === 'month') {
     const start = `${s.date.slice(0, 7)}-01`;
     return { ...monthRange(start), title: monthTitle(start), prev: addMonths(start, -1), next: addMonths(start, 1) };
@@ -122,7 +129,7 @@ function draw(s, all) {
   if (!all.views) throw new AppOutOfDate();
   const chosen = all.views[s.view] ?? all.views.FAMILY;
   /** @type {import('./views/parts.js').DaysData} */
-  const data = { from: all.from, to: all.to, days: chosen.days, reminders: chosen.reminders, pending: all.pending };
+  const data = { from: all.from, to: all.to, days: chosen.days, reminders: chosen.reminders, pending: all.pending, todos: chosen.todos ?? [] };
   const t = /** @type {import('./views/parts.js').Theme} */ (theme);
   const byDate = new Map(data.days.map((d) => [d.date, d]));
   const openDay = (/** @type {string} */ date) => go({ screen: 'day', date });
@@ -134,19 +141,31 @@ function draw(s, all) {
     if (r.ok) ctx.saved(`Restored "${c.title}".`, r);
     else toast(r.errors.map((e) => e.message).join('; '));
   };
+  const todoActions = {
+    open: (/** @type {string} */ listId) => go({ screen: 'lists', list: listId }),
+    tick: async (/** @type {import('./views/parts.js').Todo} */ todo, /** @type {HTMLButtonElement} */ button) => {
+      const r = await busy(button, () => call('listItems.setStatus', { item_id: todo.item_id, status: 'DONE' }));
+      if (r.ok) ctx.saved(`Ticked "${todo.text}".`, r);
+      else toast(r.errors.map((e) => e.message).join('; '));
+    },
+  };
   if (s.screen === 'month') return monthView(t, data, `${s.date.slice(0, 7)}-01`, today(), openDay);
   if (s.screen === 'week') {
-    return el('div', {}, data.days.map((d) => daySection(t, niceDate(d.date), d, { onTitle: () => openDay(d.date), onItem: onItem(d.date) })));
+    return el('div', {}, data.days.map((d) => [daySection(t, niceDate(d.date), d, { onTitle: () => openDay(d.date), onItem: onItem(d.date) }),
+      todoSection(data.todos.filter((x) => x.due_date === d.date), todoActions)]));
   }
   if (s.screen === 'day') {
     return el('div', {},
       daySection(t, 'Events', byDate.get(s.date), { onItem: onItem(s.date), onRestore: s.view === 'FAMILY' ? onRestore : undefined }),
+      todoSection(data.todos.filter((x) => x.due_date === s.date), todoActions),
       remindersOn(data.reminders, s.date),
       s.view === 'FAMILY' ? '' : el('p', { class: 'muted small' }, 'Cancelled events can be restored from the Family view.'));
   }
   const tomorrow = addDays(data.from, 1);
   return el('div', {},
+    todoSection(data.todos.filter((x) => x.due_date < data.from), todoActions, 'Overdue'),
     daySection(t, `Today · ${niceDate(data.from)}`, byDate.get(data.from), { onTitle: () => openDay(data.from), onItem: onItem(data.from) }),
+    todoSection(data.todos.filter((x) => x.due_date === data.from), todoActions),
     daySection(t, `Tomorrow · ${niceDate(tomorrow)}`, byDate.get(tomorrow), { onTitle: () => openDay(tomorrow), onItem: onItem(tomorrow) }),
     remindersOn(data.reminders, data.from));
 }
@@ -201,11 +220,11 @@ async function show(force = false) {
   $('next').hidden = f.next === null;
   $('prev').onclick = () => f.prev && go({ date: f.prev });
   $('next').onclick = () => f.next && go({ date: f.next });
-  $('filters').hidden = s.screen === 'more' || s.screen === 'review';
-  if (s.screen === 'more' || s.screen === 'review') {
+  $('filters').hidden = s.screen === 'more' || s.screen === 'review' || s.screen === 'lists';
+  if (s.screen === 'more' || s.screen === 'review' || s.screen === 'lists') {
     $('today-button').hidden = true;
     $('print-button').hidden = true;
-    await (s.screen === 'more' ? showMore(mine) : showReview(mine));
+    await (s.screen === 'more' ? showMore(mine) : s.screen === 'lists' ? showLists(mine, s) : showReview(mine));
     return;
   }
 
@@ -272,6 +291,44 @@ async function showMore(mine) {
   } catch (e) {
     if (mine !== showing) return;
     showError(`Could not load: ${e instanceof Error ? e.message : String(e)}`);
+  }
+}
+
+/**
+ * Lists: the overview, or one list (saved copy first). Ticks and new items update the saved copy
+ * directly, so the screen stays instant; everything else reloads from the server.
+ * @param {number} mine
+ * @param {State} s
+ */
+async function showLists(mine, s) {
+  const saved = cache.read('lists');
+  /** @type {import('./views/lists.js').ListsScreen} */
+  const screen = {
+    ctx: formContext(),
+    data: saved?.data ?? { lists: [], items: [], events: [] },
+    open: (listId) => go({ screen: 'lists', list: listId }),
+    redraw: () => { if (mine === showing) $('main').replaceChildren(drawIt()); },
+    // A list change can change what the calendar shows under "To do", so saved months are dropped too.
+    persist: () => { cache.write('lists', screen.data); cache.clearCalendar(); },
+    reload: () => { if (mine === showing) show(true); },
+  };
+  const drawIt = () => (s.list ? listDetail(screen, s.list, today()) : listsOverview(screen));
+  const savedView = saved ? drawSaved(drawIt) : null;
+  if (savedView) $('main').replaceChildren(savedView);
+  else $('main').replaceChildren(el('p', { class: 'muted' }, 'Loading…'));
+  try {
+    const r = await call('lists.all');
+    if (mine !== showing) return;
+    if (!r.ok) throw new Error(r.errors.map((e) => e.message).join('; '));
+    screen.data = r.data;
+    cache.write('lists', r.data);
+    // Keep what is being typed: only redraw if the quick-add box is empty.
+    const typing = /** @type {HTMLInputElement|null} */ (document.querySelector('.add-input'))?.value;
+    if (!typing) $('main').replaceChildren(drawIt());
+  } catch (e) {
+    if (mine !== showing) return;
+    if (!savedView) showError(`Could not load: ${e instanceof Error ? e.message : String(e)}`);
+    else toast(`Could not refresh: ${e instanceof Error ? e.message : String(e)}`);
   }
 }
 

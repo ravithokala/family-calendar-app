@@ -10,13 +10,15 @@ import { el } from '../dom.js';
  *   all_day: boolean, start_time: string|null, end_time: string|null,
  *   span: { start_date: string, end_date: string, first: boolean, last: boolean } | null,
  *   participants: string[], related_people: string[], location: string|null, notes: string|null, routine: boolean,
- *   edit: { start_date: string|null, end_date: string|null, calendars: string[], icon: string|null, all_day: boolean|null } | null }} AppItem
+ *   edit: { start_date: string|null, end_date: string|null, calendars: string[], icon: string|null, all_day: boolean|null } | null,
+ *   lists?: Array<{ list_id: string, title: string, done: number, total: number }> }} AppItem
  * @typedef {{ event_id: string, title: string, participants: string[], start_time: string|null, end_time: string|null, routine: boolean }} CancelledItem
  * @typedef {{ person: string, period_type: string, kind: 'BREAK' | 'NO_SCHOOL' }} SchoolDay
  * @typedef {{ date: string, weekday: string, items: AppItem[], school: SchoolDay[], cancelled?: CancelledItem[] }} AppDay
  * @typedef {{ reminder_id: string, title: string, owner: string[], window_start: string, window_end: string }} AppReminder
- * @typedef {{ from: string, to: string, days: AppDay[], reminders: AppReminder[], pending: number }} DaysData  one filter's days
- * @typedef {{ from: string, to: string, views: Record<string, { days: AppDay[], reminders: AppReminder[] }>, pending: number }} AllDays
+ * @typedef {{ item_id: string, list_id: string, list_title: string, text: string, owner: string[], due_date: string, notes: string|null }} Todo
+ * @typedef {{ from: string, to: string, days: AppDay[], reminders: AppReminder[], pending: number, todos: Todo[] }} DaysData  one filter's days
+ * @typedef {{ from: string, to: string, views: Record<string, { days: AppDay[], reminders: AppReminder[], todos?: Todo[] }>, pending: number }} AllDays
  * @typedef {{ background: string, text: string, bar?: string }} Tone
  * @typedef {{ tones: Record<string, Tone>, icons: Record<string, string>, shades: Record<string, string>,
  *   periodLabels: Record<string, string> }} Theme
@@ -134,4 +136,21 @@ export function remindersOn(reminders, date) {
     el('ul', { class: 'items' }, due.map((r) => el('li', { class: 'item' },
       el('span', { class: 'time' }, `by ${r.window_end.slice(8)}/${r.window_end.slice(5, 7)}`),
       el('div', { class: 'body' }, `${r.owner.join('+')} - ${r.title}`)))));
+}
+
+/**
+ * List items due on a day (or overdue), under "To do" (ADR-085): tick one off, or open its list.
+ * @param {Todo[]} todos
+ * @param {{ open: (listId: string) => void, tick: (todo: Todo, button: HTMLButtonElement) => void }} actions
+ * @param {string} [heading]
+ */
+export function todoSection(todos, actions, heading = 'To do') {
+  if (todos.length === 0) return '';
+  return el('section', { class: 'todos' },
+    el('h2', {}, heading),
+    el('ul', { class: 'list-items' }, todos.map((t) => el('li', { class: 'list-item' },
+      el('button', { class: 'tick', type: 'button', 'aria-label': 'Tick', onclick: (/** @type {Event} */ ev) => actions.tick(t, /** @type {HTMLButtonElement} */ (ev.currentTarget)) }, ''),
+      el('div', { class: 'list-item-body', onclick: () => actions.open(t.list_id) },
+        el('div', { class: 'list-item-text' }, t.text),
+        el('div', { class: 'details' }, [t.list_title, t.owner.join('+'), heading === 'Overdue' ? `was due ${t.due_date.slice(8)}/${t.due_date.slice(5, 7)}` : '', t.notes ?? ''].filter(Boolean).join(' · ')))))));
 }
