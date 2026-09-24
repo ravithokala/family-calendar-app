@@ -116,3 +116,21 @@ button:disabled { opacity: 0.6; }
   padding: 10px 14px; border-radius: 10px; font-size: 14px; box-shadow: 0 4px 14px rgba(0,0,0,0.25); }
 #toast .warn { margin-top: 6px; color: #F2D58A; }
 .version { margin-top: 28px; text-align: center; }
+
+/* Review, sources and printing (ADR-082) */
+.badge { border: 0; cursor: pointer; }
+.card { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin: 10px 0; display: flex; flex-direction: column; gap: 6px; }
+.card-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.tag { font-size: 12px; background: var(--soft); color: var(--muted); padding: 1px 8px; border-radius: 10px; }
+.card-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.card-actions button { flex: 1 1 auto; font-size: 15px; padding: 9px 12px; border-radius: 8px; cursor: pointer; }
+.card-actions button.wide { flex-basis: 100%; text-align: left; }
+button.secondary { background: var(--bg); color: var(--accent); border: 1px solid var(--accent); }
+.diff { margin: 0; padding-left: 18px; }
+del { color: var(--bad); } ins { color: #1E7B34; text-decoration: none; font-weight: 700; }
+.wide-button { width: 100%; font-size: 16px; padding: 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--soft); cursor: pointer; text-align: left; margin: 4px 0 8px; }
+textarea { font: inherit; font-size: 15px; color: var(--text); background: var(--bg); padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; width: 100%; }
+textarea.prompt { font: 12px/1.35 ui-monospace, Menlo, Consolas, monospace; background: var(--soft); }
+.steps { margin: 0; padding-left: 20px; font-size: 14px; }
+.links { padding-left: 18px; }
+.links a, a.link { color: var(--accent); }

@@ -5,13 +5,18 @@ import { reminderSheet, routineSheet } from './forms.js';
 import { showIssues } from './sheet.js';
 import { busy } from './fields.js';
 import { VERSION } from '../version.js';
+import { sourceSheet, recentSources } from './sources.js';
+import { printSheet } from './print.js';
 
 /**
- * The More screen: reminders (add, edit, done, cancel, reopen) and routines (list, add).
+ * The More screen: review and sources, printing, reminders (add, edit, done, cancel, reopen) and
+ * routines (list, add).
  * @param {import('./forms.js').FormContext} ctx
- * @param {{ reminders: import('./forms.js').Reminder[], activities: any[], schedules: any[] }} data
+ * @param {{ reminders: import('./forms.js').Reminder[], activities: any[], schedules: any[],
+ *   sources: import('./sources.js').SourceSummary[], pending: number }} data
+ * @param {{ openReview: () => void, today: string }} nav
  */
-export function moreView(ctx, data) {
+export function moreView(ctx, data, nav) {
   const messages = el('div', { class: 'messages' });
   /** @param {import('./forms.js').Reminder} r @param {string} status @param {string} done */
   const setStatus = (r, status, done) => async (/** @type {Event} */ ev) => {
@@ -44,6 +49,15 @@ export function moreView(ctx, data) {
 
   return el('div', {},
     messages,
+    el('section', {},
+      el('div', { class: 'section-head' }, el('h2', {}, 'Review and sources'),
+        el('button', { class: 'link', type: 'button', onclick: () => sourceSheet(ctx, data.activities) }, '+ Add a source')),
+      el('button', { class: 'wide-button', type: 'button', onclick: nav.openReview },
+        data.pending ? `Review ${data.pending} waiting item${data.pending === 1 ? '' : 's'}` : 'Review: nothing waiting'),
+      recentSources(ctx, data.sources)),
+    el('section', {},
+      el('div', { class: 'section-head' }, el('h2', {}, 'Printed calendars'),
+        el('button', { class: 'link', type: 'button', onclick: () => printSheet(ctx, nav.today) }, 'Print a month'))),
     el('section', {},
       el('div', { class: 'section-head' }, el('h2', {}, 'Reminders'),
         el('button', { class: 'link', type: 'button', onclick: () => reminderSheet(ctx) }, '+ Add')),

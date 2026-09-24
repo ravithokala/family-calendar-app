@@ -9,6 +9,7 @@ import { daySection, remindersOn } from './views/parts.js';
 import { monthView, monthRange } from './views/month.js';
 import { eventSheet, eventDetails, routineSheet, reminderSheet } from './views/forms.js';
 import { moreView } from './views/more.js';
+import { reviewView } from './views/review.js';
 import { openSheet, toast } from './views/sheet.js';
 import { busy } from './views/fields.js';
 
@@ -17,12 +18,14 @@ import { busy } from './views/fields.js';
  * shown comes from the server after sign-in. Screens: Today, Month (default), Week, Day, each for
  * one filter (Family, C, R, RT, G). The screen lives in the address, so Back works.
  *
- * @typedef {'today' | 'month' | 'week' | 'day' | 'more'} Screen
+ * @typedef {'today' | 'month' | 'week' | 'day' | 'more' | 'review'} Screen
  * @typedef {{ screen: Screen, date: string, view: string }} State
  */
 
 const $ = (/** @type {string} */ id) => /** @type {HTMLElement} */ (document.getElementById(id));
-const SCREENS = /** @type {Screen[]} */ (['today', 'month', 'week', 'day', 'more']);
+const SCREENS = /** @type {Screen[]} */ (['today', 'month', 'week', 'day', 'more', 'review']);
+/** The bottom bar; Review is reached from the badge and from More. */
+const TABS = SCREENS.filter((s) => s !== 'review');
 const VIEW_KEY = 'fc.view';
 /** @type {import('./views/parts.js').Theme|null} */
 let theme = null;
@@ -84,6 +87,7 @@ function showError(message) {
 /** @param {number} count */
 function showPending(count) {
   $('pending').hidden = count === 0;
+  $('pending').dataset.count = String(count);
   $('pending').textContent = count === 0 ? '' : `${count} to review`;
 }
 
@@ -93,6 +97,7 @@ function showPending(count) {
  */
 function frame(s) {
   if (s.screen === 'more') return { from: '', to: '', title: 'More', prev: null, next: null };
+  if (s.screen === 'review') return { from: '', to: '', title: 'Review', prev: null, next: null };
   if (s.screen === 'month') {
     const start = `${s.date.slice(0, 7)}-01`;
     return { ...monthRange(start), title: monthTitle(start), prev: addMonths(start, -1), next: addMonths(start, 1) };
@@ -178,10 +183,10 @@ async function show(force = false) {
   $('next').hidden = f.next === null;
   $('prev').onclick = () => f.prev && go({ date: f.prev });
   $('next').onclick = () => f.next && go({ date: f.next });
-  $('filters').hidden = s.screen === 'more';
-  if (s.screen === 'more') {
+  $('filters').hidden = s.screen === 'more' || s.screen === 'review';
+  if (s.screen === 'more' || s.screen === 'review') {
     $('today-button').hidden = true;
-    await showMore(mine);
+    await (s.screen === 'more' ? showMore(mine) : showReview(mine));
     return;
   }
 
@@ -227,16 +232,42 @@ async function show(force = false) {
  */
 async function showMore(mine) {
   const saved = cache.read('more');
-  const draw = (/** @type {any} */ data) => moreView(formContext(), data);
+  const draw = (/** @type {any} */ data) => moreView(formContext(), data, { openReview: () => go({ screen: 'review' }), today: today() });
   if (saved) $('main').replaceChildren(draw(saved.data), el('p', { class: 'status muted' }, 'Updating…'));
   else $('main').replaceChildren(el('p', { class: 'muted' }, 'Loading…'));
   try {
-    const [reminders, routines] = await Promise.all([call('reminders.list'), call('routines.list')]);
+    const [reminders, routines, sources, count] = await Promise.all([call('reminders.list'), call('routines.list'), call('sources.list'), call('review.count')]);
     if (mine !== showing) return;
-    if (!reminders.ok || !routines.ok) throw new Error([...reminders.errors, ...routines.errors].map((e) => e.message).join('; '));
-    const data = { reminders: reminders.data.reminders, activities: routines.data.activities, schedules: routines.data.schedules };
+    if (!reminders.ok || !routines.ok || !sources.ok) {
+      throw new Error([...reminders.errors, ...routines.errors, ...sources.errors].map((e) => e.message).join('; '));
+    }
+    const pending = count.ok ? count.data.count : Number($('pending').dataset.count ?? 0);
+    showPending(pending);
+    const data = { reminders: reminders.data.reminders, activities: routines.data.activities, schedules: routines.data.schedules, sources: sources.data.sources, pending };
     cache.write('more', data);
     $('main').replaceChildren(draw(data), refreshLink(`Updated ${clock(Date.now())}`));
+  } catch (e) {
+    if (mine !== showing) return;
+    showError(`Could not load: ${e instanceof Error ? e.message : String(e)}`);
+  }
+}
+
+/**
+ * The review inbox (saved copy first).
+ * @param {number} mine
+ */
+async function showReview(mine) {
+  const saved = cache.read('review');
+  const draw = (/** @type {any} */ inbox) => reviewView(formContext(), inbox);
+  if (saved) $('main').replaceChildren(draw(saved.data), el('p', { class: 'status muted' }, 'Updating…'));
+  else $('main').replaceChildren(el('p', { class: 'muted' }, 'Loading…'));
+  try {
+    const r = await call('review.inbox');
+    if (mine !== showing) return;
+    if (!r.ok) throw new Error(r.errors.map((e) => e.message).join('; '));
+    cache.write('review', r.data);
+    showPending(r.data.count);
+    $('main').replaceChildren(draw(r.data), refreshLink(`Updated ${clock(Date.now())}`));
   } catch (e) {
     if (mine !== showing) return;
     showError(`Could not load: ${e instanceof Error ? e.message : String(e)}`);
@@ -265,7 +296,8 @@ function showSignedIn() {
     el('span', { class: 'muted' }, user() ?? ''),
     el('button', { class: 'link', onclick: async () => { await signOut(); signOutOfGoogle(); cache.clear(); location.hash = ''; location.reload(); } }, 'Sign out'));
   $('filters').replaceChildren(...views.map((v) => el('button', { 'data-view': v, onclick: () => go({ view: v }) }, v === 'FAMILY' ? 'Family' : v)));
-  $('tabs').replaceChildren(...SCREENS.map((screen) => el('button', {
+  $('pending').onclick = () => go({ screen: 'review' });
+  $('tabs').replaceChildren(...TABS.map((screen) => el('button', {
     'data-screen': screen,
     onclick: () => go({ screen, date: screen === 'today' ? today() : readState().date }),
   }, screen[0].toUpperCase() + screen.slice(1))));

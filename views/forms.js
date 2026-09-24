@@ -22,12 +22,14 @@ const words = (s) => s.charAt(0) + s.slice(1).toLowerCase().replace(/_/g, ' ');
 
 /**
  * The event form, empty for a new event or filled in to edit one. Editing sends only what changed;
- * the server keeps the old version as history (ADR-070).
+ * the server keeps the old version as history (ADR-070). With `review`, the form corrects a
+ * proposed event and approving it sends only the corrections (ADR-074, ADR-082).
  * @param {FormContext} ctx
- * @param {{ item?: AppItem, date?: string }} from
+ * @param {{ item?: AppItem, date?: string, review?: { heading: string, send: (corrections: Record<string, unknown>) => Promise<ApiResponse> } }} from
  */
 export function eventSheet(ctx, from) {
   const item = from.item;
+  const review = from.review;
   const e = item?.edit;
   const initial = {
     title: item?.title ?? null, event_type: item?.event_type ?? 'APPOINTMENT', start_date: e?.start_date ?? from.date ?? null,
@@ -74,10 +76,18 @@ export function eventSheet(ctx, from) {
     el('details', { class: 'more-fields' }, el('summary', {}, 'More: until, where, notes, printing'),
       field('Until (multi-day)', f.end_date.node), field('Where', f.location.node), field('Notes', f.notes.node),
       f.masterOnly.node, field('Icon', f.icon.node)),
-    el('div', { class: 'actions' }, saveButton(item ? 'Save changes' : 'Add event', async () => {
+    el('div', { class: 'actions' }, saveButton(review ? 'Approve' : item ? 'Save changes' : 'Add event', async () => {
       const v = values();
       /** @type {ApiResponse} */
       let r;
+      if (review) {
+        const corrections = Object.fromEntries(Object.entries(v).filter(([k, val]) => JSON.stringify(val) !== JSON.stringify(/** @type {any} */ (initial)[k])));
+        r = await review.send(corrections);
+        if (!r.ok) { showIssues(sheet.messages, r); return; }
+        sheet.close();
+        ctx.saved(`Approved "${v.title}".`, r);
+        return;
+      }
       if (item) {
         const changes = Object.fromEntries(Object.entries(v).filter(([k, val]) => JSON.stringify(val) !== JSON.stringify(/** @type {any} */ (initial)[k])));
         if (Object.keys(changes).length === 0) { sheet.close(); return; }
@@ -89,7 +99,7 @@ export function eventSheet(ctx, from) {
       sheet.close();
       ctx.saved(item ? `Saved "${v.title}".` : `Added "${v.title}".`, r);
     })));
-  const sheet = openSheet(item ? 'Edit event' : 'Add event', form);
+  const sheet = openSheet(review ? review.heading : item ? 'Edit event' : 'Add event', form);
   if (!item) f.title.node.focus();
 }
 

@@ -78,6 +78,7 @@ export function covering(from, to) {
 /** Forgets every saved calendar range and the More lists, e.g. after a change. */
 export function clearDays() {
   try {
-    Object.keys(localStorage).filter((k) => k.startsWith(`${PREFIX}days:`) || k === `${PREFIX}more`).forEach((k) => localStorage.removeItem(k));
+    Object.keys(localStorage).filter((k) => k.startsWith(`${PREFIX}days:`) || k === `${PREFIX}more` || k === `${PREFIX}review`)
+      .forEach((k) => localStorage.removeItem(k));
   } catch (e) { /* ignore */ }
 }
