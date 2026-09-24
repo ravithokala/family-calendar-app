@@ -18,10 +18,23 @@
 </head>
 <body>
 <header>
-  <h1>Family Calendar</h1>
-  <div id="account"></div>
+  <div class="top">
+    <h1>Family Calendar</h1>
+    <span id="pending" class="badge" hidden></span>
+    <div id="account"></div>
+  </div>
+  <div id="chrome" hidden>
+    <nav id="filters" aria-label="Whose calendar"></nav>
+    <div class="nav">
+      <button id="prev" class="step" aria-label="Previous">‹</button>
+      <h2 id="title"></h2>
+      <button id="next" class="step" aria-label="Next">›</button>
+      <button id="today-button" class="link">Today</button>
+    </div>
+  </div>
 </header>
 <div id="signin"></div>
 <main id="main"><p class="muted">Loading…</p></main>
+<nav id="tabs" aria-label="Screens"></nav>
 </body>
 </html>
