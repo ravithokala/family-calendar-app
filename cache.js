@@ -4,7 +4,18 @@
  * The last answer for each screen, kept on this phone so a screen draws at once and refreshes
  * behind it (ADR-078). Cleared on sign-out. Never shared: it is this device's own storage.
  */
-const PREFIX = 'fc.cache.';
+/**
+ * Bump FORMAT whenever a saved answer's shape changes: copies saved by an older app version are then
+ * ignored and removed instead of being drawn wrongly (RT, 2026-09-24: the More tab broke on update).
+ */
+const FORMAT = 2;
+const ROOT = 'fc.cache.';
+const PREFIX = `${ROOT}v${FORMAT}.`;
+
+// Remove copies saved in any older format.
+try {
+  Object.keys(localStorage).filter((k) => k.startsWith(ROOT) && !k.startsWith(PREFIX)).forEach((k) => localStorage.removeItem(k));
+} catch (e) { /* storage unavailable */ }
 /** Enough for a few months, weeks and days either way; the oldest go first. */
 const KEEP = 20;
 
@@ -36,7 +47,7 @@ export function write(key, data) {
 
 export function clear() {
   try {
-    Object.keys(localStorage).filter((k) => k.startsWith(PREFIX)).forEach((k) => localStorage.removeItem(k));
+    Object.keys(localStorage).filter((k) => k.startsWith(ROOT)).forEach((k) => localStorage.removeItem(k));
   } catch (e) { /* ignore */ }
 }
 
@@ -52,7 +63,8 @@ export function covering(from, to) {
   let best = null;
   try {
     for (const key of Object.keys(localStorage)) {
-      const m = key.match(/^fc\.cache\.days:(\d{4}-\d{2}-\d{2}):(\d{4}-\d{2}-\d{2})$/);
+      if (!key.startsWith(`${PREFIX}days:`)) continue;
+      const m = key.slice(PREFIX.length).match(/^days:(\d{4}-\d{2}-\d{2}):(\d{4}-\d{2}-\d{2})$/);
       if (!m || m[1] > from || m[2] < to) continue;
       const entry = read(key.slice(PREFIX.length));
       if (entry && (!best || entry.at > best.at)) best = entry;

@@ -165,6 +165,20 @@ function reloadForUpdate() {
   return true;
 }
 
+/**
+ * Draws a saved copy, or returns null if it cannot be drawn (e.g. saved by an older version), so
+ * the screen loads fresh instead of breaking.
+ * @param {() => HTMLElement} drawIt
+ * @returns {HTMLElement|null}
+ */
+function drawSaved(drawIt) {
+  try {
+    return drawIt();
+  } catch (e) {
+    return null;
+  }
+}
+
 /** Guards against an older request finishing after a newer one. */
 let showing = 0;
 /** A saved screen younger than this is shown without asking the server again. */
@@ -194,15 +208,17 @@ async function show(force = false) {
   // answer and switching between them never waits (RT, 2026-09-24).
   const fetchRange = monthRange(`${f.from.slice(0, 7)}-01`);
   const key = `days:${fetchRange.from}:${fetchRange.to}`;
-  const saved = cache.covering(f.from, f.to);
+  const covering = cache.covering(f.from, f.to);
   const status = el('p', { class: 'status muted' }, 'Updating…');
-  if (saved) {
+  const savedView = covering ? drawSaved(() => draw(s, covering.data)) : null;
+  const saved = savedView ? covering : null;
+  if (saved && savedView) {
     showPending(saved.data.pending);
     if (!force && Date.now() - saved.at < FRESH_MS) {
-      $('main').replaceChildren(draw(s, saved.data), refreshLink(`Updated ${clock(saved.at)}`));
+      $('main').replaceChildren(savedView, refreshLink(`Updated ${clock(saved.at)}`));
       return;
     }
-    $('main').replaceChildren(draw(s, saved.data), status);
+    $('main').replaceChildren(savedView, status);
   } else {
     $('main').replaceChildren(el('p', { class: 'muted' }, 'Loading… (the first load of the day can take a few seconds)'));
   }
@@ -233,7 +249,8 @@ async function show(force = false) {
 async function showMore(mine) {
   const saved = cache.read('more');
   const draw = (/** @type {any} */ data) => moreView(formContext(), data, { openReview: () => go({ screen: 'review' }), today: today() });
-  if (saved) $('main').replaceChildren(draw(saved.data), el('p', { class: 'status muted' }, 'Updating…'));
+  const savedView = saved ? drawSaved(() => draw(saved.data)) : null;
+  if (savedView) $('main').replaceChildren(savedView, el('p', { class: 'status muted' }, 'Updating…'));
   else $('main').replaceChildren(el('p', { class: 'muted' }, 'Loading…'));
   try {
     const [reminders, routines, sources, count] = await Promise.all([call('reminders.list'), call('routines.list'), call('sources.list'), call('review.count')]);
@@ -259,7 +276,8 @@ async function showMore(mine) {
 async function showReview(mine) {
   const saved = cache.read('review');
   const draw = (/** @type {any} */ inbox) => reviewView(formContext(), inbox);
-  if (saved) $('main').replaceChildren(draw(saved.data), el('p', { class: 'status muted' }, 'Updating…'));
+  const savedView = saved ? drawSaved(() => draw(saved.data)) : null;
+  if (savedView) $('main').replaceChildren(savedView, el('p', { class: 'status muted' }, 'Updating…'));
   else $('main').replaceChildren(el('p', { class: 'muted' }, 'Loading…'));
   try {
     const r = await call('review.inbox');
