@@ -1,6 +1,6 @@
 {
   "name": "Family Calendar",
-  "short_name": "Calendar",
+  "short_name": "Family Cal",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
