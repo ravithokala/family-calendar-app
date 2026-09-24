@@ -49,6 +49,12 @@ function go(change) {
 /** @param {number} at */
 const clock = (at) => new Date(at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 
+/**
+ * The "Updated …" line; tapping it refreshes now.
+ * @param {string} text
+ */
+const refreshLink = (text) => el('p', { class: 'status muted', onclick: () => show(true) }, `${text} · tap to refresh`);
+
 /** @param {string} message */
 function showError(message) {
   $('main').replaceChildren(el('p', { class: 'error' }, message));
@@ -101,8 +107,11 @@ function draw(s, data) {
 
 /** Guards against an older request finishing after a newer one. */
 let showing = 0;
+/** A saved screen younger than this is shown without asking the server again. */
+const FRESH_MS = 60 * 1000;
 
-async function show() {
+/** @param {boolean} [force]  ask the server even if the saved screen is fresh */
+async function show(force = false) {
   const s = readState();
   const f = frame(s);
   const mine = ++showing;
@@ -116,11 +125,15 @@ async function show() {
   $('next').onclick = () => f.next && go({ date: f.next });
 
   const key = `days:${s.view}:${f.from}:${f.to}`;
-  const saved = cache.read(key);
+  const saved = cache.covering(s.view, f.from, f.to);
   const status = el('p', { class: 'status muted' }, 'Updating…');
   if (saved) {
-    $('main').replaceChildren(draw(s, saved.data), status);
     showPending(saved.data.pending);
+    if (!force && Date.now() - saved.at < FRESH_MS) {
+      $('main').replaceChildren(draw(s, saved.data), refreshLink(`Updated ${clock(saved.at)}`));
+      return;
+    }
+    $('main').replaceChildren(draw(s, saved.data), status);
   } else {
     $('main').replaceChildren(el('p', { class: 'muted' }, 'Loading… (the first load of the day can take a few seconds)'));
   }
@@ -132,7 +145,7 @@ async function show() {
     showPending(r.data.pending);
     const server = lastTiming.server_ms === null ? '' : ` · server ${(lastTiming.server_ms / 1000).toFixed(1)} s`;
     $('main').replaceChildren(draw(s, r.data),
-      el('p', { class: 'status muted' }, `Updated ${clock(Date.now())} · ${(lastTiming.total_ms / 1000).toFixed(1)} s${server}`));
+      refreshLink(`Updated ${clock(Date.now())} · ${(lastTiming.total_ms / 1000).toFixed(1)} s${server}`));
   } catch (e) {
     if (mine !== showing) return;
     const message = `Could not refresh: ${e instanceof Error ? e.message : String(e)}`;
@@ -168,7 +181,7 @@ function showSignedIn() {
     onclick: () => go({ screen, date: screen === 'today' ? today() : readState().date }),
   }, screen[0].toUpperCase() + screen.slice(1))));
   $('today-button').onclick = () => go({ date: today() });
-  window.addEventListener('hashchange', show);
+  window.addEventListener('hashchange', () => show());
 }
 
 async function start() {

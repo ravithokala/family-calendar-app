@@ -39,3 +39,36 @@ export function clear() {
     Object.keys(localStorage).filter((k) => k.startsWith(PREFIX)).forEach((k) => localStorage.removeItem(k));
   } catch (e) { /* ignore */ }
 }
+
+/**
+ * The freshest saved answer for a view that covers [from, to], cut down to those days: a loaded
+ * month already holds its weeks and days (ADR-080).
+ * @param {string} view
+ * @param {string} from
+ * @param {string} to
+ * @returns {{ at: number, data: any } | null}
+ */
+export function covering(view, from, to) {
+  /** @type {{ at: number, data: any } | null} */
+  let best = null;
+  try {
+    for (const key of Object.keys(localStorage)) {
+      const m = key.match(/^fc\.cache\.days:([A-Z]+):(\d{4}-\d{2}-\d{2}):(\d{4}-\d{2}-\d{2})$/);
+      if (!m || m[1] !== view || m[2] > from || m[3] < to) continue;
+      const entry = read(key.slice(PREFIX.length));
+      if (entry && (!best || entry.at > best.at)) best = entry;
+    }
+  } catch (e) {
+    return null;
+  }
+  if (!best) return null;
+  const data = best.data;
+  return {
+    at: best.at,
+    data: {
+      ...data, from, to,
+      days: data.days.filter((/** @type {{ date: string }} */ d) => d.date >= from && d.date <= to),
+      reminders: data.reminders.filter((/** @type {{ window_start: string, window_end: string }} */ r) => r.window_start <= to && r.window_end >= from),
+    },
+  };
+}

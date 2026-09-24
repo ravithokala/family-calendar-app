@@ -4,7 +4,7 @@
  * Caches the app shell only (ADR-078): no calendar data is ever cached here. Requests to other
  * sites (the API, Google sign-in) are left to the network.
  */
-const VERSION = 'shell-v5';
+const VERSION = 'shell-v6';
 const SHELL = ['./', 'index.html', 'app.js', 'api.js', 'auth.js', 'cache.js', 'config.js', 'dom.js', 'views/parts.js', 'views/month.js', 'styles.css',
   'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png', 'icons/apple-touch-icon.png'];
 
