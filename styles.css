@@ -26,3 +26,4 @@ h2 { font-size: 15px; margin: 18px 0 6px; color: var(--muted); font-weight: 600;
 .error { color: var(--bad); }
 .notice { background: var(--notice-bg); color: var(--notice); padding: 8px 12px; border-radius: 8px; }
 button.link { background: none; border: 0; padding: 4px; color: var(--accent); font: inherit; cursor: pointer; }
+.status { font-size: 12px; margin-top: 18px; }

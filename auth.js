@@ -1,8 +1,9 @@
 // @ts-check
 
 /**
- * Google sign-in with Google Identity Services (ADR-078). The ID token lives in memory and in
- * sessionStorage (gone when the app is closed); signing in again is usually silent.
+ * Google sign-in with Google Identity Services (ADR-078). The ID token is kept in localStorage
+ * for its one-hour life, so reopening the app does not wait for Google; after that, signing in
+ * again is usually silent.
  */
 
 /**
@@ -54,7 +55,7 @@ const gis = () => /** @type {any} */ (window).google;
 /** @param {string} jwt */
 function accept(jwt) {
   token = jwt;
-  try { sessionStorage.setItem(KEY, jwt); } catch (e) { /* storage may be unavailable */ }
+  try { localStorage.setItem(KEY, jwt); } catch (e) { /* storage may be unavailable */ }
   const resolve = waiting;
   waiting = [];
   resolve.forEach((fn) => fn(jwt));
@@ -67,7 +68,7 @@ function accept(jwt) {
  */
 export async function init(clientId, buttonHost) {
   try {
-    const saved = sessionStorage.getItem(KEY);
+    const saved = localStorage.getItem(KEY);
     if (saved && fresh(saved)) token = saved;
   } catch (e) { /* ignore */ }
   for (let i = 0; i < 100 && !gis()?.accounts?.id; i++) await new Promise((r) => setTimeout(r, 100));
@@ -98,7 +99,7 @@ export function idToken() {
 /** Forgets the token, e.g. after the server refuses it. */
 export function forget() {
   token = null;
-  try { sessionStorage.removeItem(KEY); } catch (e) { /* ignore */ }
+  try { localStorage.removeItem(KEY); } catch (e) { /* ignore */ }
 }
 
 export function signOut() {

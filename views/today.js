@@ -1,10 +1,11 @@
 // @ts-check
 
-import { el, niceDate, isoDate, addDays } from '../dom.js';
+import { el, niceDate, addDays } from '../dom.js';
 
 /**
  * @typedef {{ event_id: string, title: string, start_date: string, end_date: string|null, start_time: string|null,
  *   end_time: string|null, all_day: boolean, participants: string[], event_type: string, schedule_id: string|null }} EventView
+ * @typedef {{ date: string, events: EventView[], pending: number }} TodayData
  */
 
 /** @param {EventView} e */
@@ -26,24 +27,15 @@ function day(title, events) {
 }
 
 /**
- * Today and tomorrow, from the server's calendar query (Master: everything).
- * @param {(action: string, payload?: unknown) => Promise<any>} call
- * @returns {Promise<HTMLElement>}
+ * Draws today and tomorrow from the server's answer (app.today).
+ * @param {TodayData} data
+ * @returns {HTMLElement}
  */
-export async function todayView(call) {
-  const today = isoDate(new Date());
-  const tomorrow = addDays(today, 1);
-  const [events, inbox] = await Promise.all([
-    call('calendar.getEvents', { from: today, to: tomorrow, calendar: 'MASTER' }),
-    call('review.inbox'),
-  ]);
-  if (!events.ok) throw new Error(events.errors.map((/** @type {{ message: string }} */ e) => e.message).join('; '));
-  /** @type {EventView[]} */
-  const all = events.data.events;
-  const on = (/** @type {string} */ date) => all.filter((e) => e.start_date <= date && (e.end_date ?? e.start_date) >= date);
-  const pending = inbox.ok ? inbox.data.count : 0;
+export function todayView(data) {
+  const tomorrow = addDays(data.date, 1);
+  const on = (/** @type {string} */ date) => data.events.filter((e) => e.start_date <= date && (e.end_date ?? e.start_date) >= date);
   return el('div', {},
-    pending > 0 ? el('p', { class: 'notice' }, `${pending} item${pending === 1 ? '' : 's'} waiting for review`) : '',
-    day(`Today · ${niceDate(today)}`, on(today)),
+    data.pending > 0 ? el('p', { class: 'notice' }, `${data.pending} item${data.pending === 1 ? '' : 's'} waiting for review`) : '',
+    day(`Today · ${niceDate(data.date)}`, on(data.date)),
     day(`Tomorrow · ${niceDate(tomorrow)}`, on(tomorrow)));
 }
