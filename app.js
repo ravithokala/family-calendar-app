@@ -187,7 +187,7 @@ function draw(s, all) {
   };
   if (s.screen === 'month') return monthView(t, data, `${s.date.slice(0, 7)}-01`, today(), openDay, s.view);
   if (s.screen === 'week') {
-    return el('div', {}, data.days.map((d) => [daySection(t, niceDate(d.date), d, { onTitle: () => openDay(d.date), onItem: onItem(d.date) }),
+    return el('div', {}, data.days.map((d) => [el('div', { 'data-date': d.date }, daySection(t, niceDate(d.date), d, { onTitle: () => openDay(d.date), onItem: onItem(d.date) })),
       todoSection(data.todos.filter((x) => x.due_date === d.date), todoActions)]));
   }
   if (s.screen === 'day') {
@@ -236,6 +236,21 @@ function drawSaved(drawIt) {
   }
 }
 
+/** Set by the Today button: the next calendar drawn scrolls to today and briefly highlights it. */
+let pointToToday = false;
+
+/** @param {boolean} last  the final drawing of this screen (a saved copy may be redrawn fresh) */
+function pointAtToday(last) {
+  if (!pointToToday) return;
+  if (last) pointToToday = false;
+  const target = document.querySelector('.cell.today') ?? document.querySelector(`[data-date="${today()}"]`);
+  if (!target) return;
+  target.scrollIntoView({ block: 'center' });
+  target.classList.remove('flash');
+  void (/** @type {HTMLElement} */ (target)).offsetWidth; // restart the highlight
+  target.classList.add('flash');
+}
+
 /** Guards against an older request finishing after a newer one. */
 let showing = 0;
 /** A saved screen younger than this is shown without asking the server again. */
@@ -276,9 +291,11 @@ async function show(force = false) {
     showPending(saved.data.pending);
     if (!force && Date.now() - saved.at < FRESH_MS) {
       $('main').replaceChildren(savedView, refreshLink(`Updated ${clock(saved.at)}`));
+      pointAtToday(true);
       return;
     }
     $('main').replaceChildren(savedView, status);
+    pointAtToday(false);
   } else {
     $('main').replaceChildren(el('p', { class: 'muted' }, 'Loading… (the first load of the day can take a few seconds)'));
   }
@@ -293,6 +310,7 @@ async function show(force = false) {
     const server = lastTiming.server_ms === null ? '' : ` · server ${(lastTiming.server_ms / 1000).toFixed(1)} s`;
     $('main').replaceChildren(draw(s, shown ? shown.data : r.data),
       refreshLink(`Updated ${clock(Date.now())} · ${(lastTiming.total_ms / 1000).toFixed(1)} s${server}`));
+    pointAtToday(true);
   } catch (e) {
     if (mine !== showing) return;
     if (e instanceof AppOutOfDate && reloadForUpdate()) return;
@@ -428,13 +446,21 @@ function showSignedIn() {
     el('button', { class: 'link', onclick: async () => { await signOut(); signOutOfGoogle(); cache.clear(); location.hash = ''; location.reload(); } }, 'Sign out'));
   $('filters').replaceChildren(...views.map((v) => el('button', { 'data-view': v, onclick: () => go({ view: v }) }, v === 'FAMILY' ? 'Family' : v)));
   $('pending').onclick = () => go({ screen: 'review' });
-  // Tapping the title shows the app's version (RT, 2026-09-25: out of the way, one tap from anywhere).
-  $('app-title').onclick = () => toast(`Family Cal · version ${VERSION}`);
   $('tabs').replaceChildren(...TABS.map((screen) => el('button', {
     'data-screen': screen,
     onclick: () => go({ screen, date: screen === 'today' ? today() : readState().date }),
   }, screen[0].toUpperCase() + screen.slice(1))));
-  $('today-button').onclick = () => go({ date: today() });
+  $('today-button').onclick = () => {
+    // Always visible: move to today, or if already there, show it again; then point at it (RT, 2026-09-25).
+    pointToToday = true;
+    const before = location.hash;
+    go({ date: today() });
+    if (location.hash === before) show();
+  };
+  // Tapping the title shows the app's version (RT, 2026-09-25). Last, and guarded: an old page
+  // without the title's id must not stop the buttons above from working.
+  const title = document.getElementById('app-title');
+  if (title) title.onclick = () => toast(`Family Cal · version ${VERSION}`);
   $('add').hidden = false;
   $('add').onclick = () => {
     const ctx = formContext();
