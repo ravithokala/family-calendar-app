@@ -514,6 +514,7 @@ const SWIPE_PX = 60;
 
 /**
  * Swipe left or right on Month, Week and Day for the next or previous one, as › and ‹ (ADR-090).
+ * On Today (today and tomorrow), a swipe opens the Day after tomorrow, or yesterday.
  * Vertical scrolling is left alone: a swipe must be mostly sideways and quick.
  */
 function enableSwipe() {
@@ -529,11 +530,16 @@ function enableSwipe() {
     const from = start;
     start = null;
     const s = readState();
-    if (!from || !['month', 'week', 'day'].includes(s.screen)) return;
+    if (!from || !['month', 'week', 'day', 'today'].includes(s.screen)) return;
     const end = e.changedTouches[0];
     const dx = end.clientX - from.x;
     const dy = end.clientY - from.y;
     if (Math.abs(dx) < SWIPE_PX || Math.abs(dx) < 2 * Math.abs(dy) || Date.now() - from.at > 800) return;
+    // Today shows today and tomorrow: swiping carries on through the days on the Day screen (RT, 2026-09-25).
+    if (s.screen === 'today') {
+      go({ screen: 'day', date: addDays(today(), dx < 0 ? 2 : -1) });
+      return;
+    }
     const f = frame(s);
     const to = dx < 0 ? f.next : f.prev;
     if (to) go({ date: to });
