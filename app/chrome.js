@@ -1,7 +1,8 @@
 // @ts-check
 
 import { user, signOutOfGoogle } from '../auth.js';
-import { signOut } from '../api.js';
+import { call, signOut } from '../api.js';
+import { searchSheet } from '../views/search.js';
 import * as cache from '../cache.js';
 import { el, addDays } from '../dom.js';
 import { eventSheet, routineSheet, reminderSheet } from '../views/forms.js';
@@ -9,7 +10,7 @@ import { captureBox } from '../views/capture.js';
 import { openSheet, toast } from '../views/sheet.js';
 import { VERSION } from '../version.js';
 import { formContext } from './context.js';
-import { $, app, TABS, go, readState, frame, today } from './state.js';
+import { $, app, TABS, go, readState, frame, today, FRESH_MS } from './state.js';
 
 /**
  * Everything around the screens: the header (account, filters, review badge, title), the bottom
@@ -65,11 +66,31 @@ export function announceUpdate() {
   } catch (e) { /* storage unavailable: nothing to compare with */ }
 }
 
+/**
+ * Opens Search with the phone's saved list at once, and fetches a newer one if it is over a minute
+ * old (ADR-094).
+ */
+async function openSearch() {
+  const saved = cache.read('search');
+  const sheet = searchSheet(formContext(), saved?.data ?? null, { today: today(), openDay: (date) => go({ screen: 'day', date }) });
+  if (saved && Date.now() - saved.at < FRESH_MS) return;
+  try {
+    const r = await call('app.search', {});
+    if (!r.ok) throw new Error(r.errors.map((e) => e.message).join('; '));
+    cache.write('search', r.data);
+    sheet.update(r.data);
+  } catch (e) {
+    if (!saved) toast(`Could not load search: ${e instanceof Error ? e.message : String(e)}`);
+  }
+}
+
 /** Sets up the header, bottom bar, + menu and swiping once signed in; screens follow the address. */
 export function showSignedIn() {
   $('signin').hidden = true;
   $('chrome').hidden = false;
   $('account').replaceChildren(
+    // Search (ADR-094): its own button; the version stays on the title.
+    el('button', { id: 'search-button', class: 'link search-button', type: 'button', 'aria-label': 'Search', onclick: openSearch }, '🔍'),
     el('span', { class: 'muted' }, user() ?? ''),
     el('button', { class: 'link', onclick: async () => { await signOut(); signOutOfGoogle(); cache.clear(); location.hash = ''; location.reload(); } }, 'Sign out'));
   $('filters').replaceChildren(...app.views.map((v) => el('button', { 'data-view': v, onclick: () => go({ view: v }) }, v === 'FAMILY' ? 'Family' : v)));

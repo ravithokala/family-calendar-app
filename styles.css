@@ -14,7 +14,10 @@ button { font: inherit; color: inherit; }
 
 header { position: sticky; top: 0; z-index: 2; background: var(--bg); border-bottom: 1px solid var(--line); padding: env(safe-area-inset-top) 12px 6px; }
 .top { display: flex; align-items: center; gap: 10px; padding-top: 8px; }
-h1 { font-size: 17px; margin: 0; flex: 1; }
+h1 { font-size: 17px; margin: 0; flex: 1; white-space: nowrap; }
+/* The home-screen name on narrow phones, so the top row (review badge, search, account) fits (RT, 2026-09-25). */
+h1 .title-short { display: none; }
+@media (max-width: 399px) { h1 .title-long { display: none; } h1 .title-short { display: inline; } }
 .badge { background: var(--bad); color: #fff; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 10px; }
 #account { display: flex; gap: 8px; align-items: center; font-size: 14px; }
 #filters { display: flex; gap: 6px; margin-top: 8px; overflow-x: auto; }
@@ -206,3 +209,7 @@ textarea.prompt { font: 12px/1.35 ui-monospace, Menlo, Consolas, monospace; back
 .overdue-text { color: var(--bad); }
 /* Print reminder (ADR-093). */
 .print-due { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 0 8px; }
+/* Search (ADR-094). */
+.search-button { font-size: 18px; padding: 2px 6px; }
+.search-input { width: 100%; box-sizing: border-box; font: inherit; font-size: 16px; padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); color: var(--text); }
+.search-results h3 { margin: 14px 0 2px; }

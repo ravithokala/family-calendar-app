@@ -16,7 +16,7 @@ import { reminderSheet } from './forms.js';
  * @param {import('./parts.js').AppReminder} r
  * @param {string} today
  */
-function reminderActions(ctx, r, today) {
+export function reminderActions(ctx, r, today) {
   const full = /** @type {import('./forms.js').Reminder} */ ({ related_people: [], notes: null, status: 'ACTIVE', ...r });
   /** @param {string} status @param {string} done */
   const setStatus = (status, done) => async (/** @type {Event} */ ev) => {

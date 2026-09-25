@@ -20,6 +20,7 @@ export const formContext = () => ({
     cache.stale('more');
     cache.stale('review');
     cache.stale('lists');
+    cache.stale('search');
     toast(message, r.warnings, undo && (() => undoSaved(undo)));
     app.show(true);
   },
