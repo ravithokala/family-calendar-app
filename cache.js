@@ -97,9 +97,20 @@ export function clearDays() {
   } catch (e) { /* ignore */ }
 }
 
-/** Forgets saved calendar months only, e.g. after a list change that shows under "To do" (ADR-085). */
-export function clearCalendar() {
+/**
+ * Marks saved calendar ranges as out of date without dropping them, e.g. after a list change that
+ * shows under "To do" (ADR-085): the calendar still draws at once and refreshes behind (RT, 2026-09-25).
+ */
+export function staleCalendar() {
   try {
-    Object.keys(localStorage).filter((k) => k.startsWith(`${PREFIX}days:`)).forEach((k) => localStorage.removeItem(k));
+    Object.keys(localStorage).filter((k) => k.startsWith(`${PREFIX}days:`)).forEach((k) => {
+      const entry = JSON.parse(localStorage.getItem(k) ?? 'null');
+      if (entry) localStorage.setItem(k, JSON.stringify({ ...entry, at: 0 }));
+    });
   } catch (e) { /* ignore */ }
+}
+
+/** Forgets one saved screen. @param {string} key */
+export function forget(key) {
+  try { localStorage.removeItem(PREFIX + key); } catch (e) { /* ignore */ }
 }

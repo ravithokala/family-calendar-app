@@ -12,7 +12,7 @@ import { moreView } from './views/more.js';
 import { reviewView } from './views/review.js';
 import { printSheet } from './views/print.js';
 import { captureBox } from './views/capture.js';
-import { listsOverview, listDetail } from './views/lists.js';
+import { listsOverview, listDetail, isUnsaved } from './views/lists.js';
 import { openSheet, toast } from './views/sheet.js';
 import { busy } from './views/fields.js';
 
@@ -145,8 +145,13 @@ function draw(s, all) {
     open: (/** @type {string} */ listId) => go({ screen: 'lists', list: listId }),
     tick: async (/** @type {import('./views/parts.js').Todo} */ todo, /** @type {HTMLButtonElement} */ button) => {
       const r = await busy(button, () => call('listItems.setStatus', { item_id: todo.item_id, status: 'DONE' }));
-      if (r.ok) ctx.saved(`Ticked "${todo.text}".`, r);
-      else toast(r.errors.map((e) => e.message).join('; '));
+      if (!r.ok) { toast(r.errors.map((e) => e.message).join('; ')); return; }
+      // Only the to-dos changed: keep the saved calendar on screen while it refreshes.
+      cache.staleCalendar();
+      cache.forget('lists');
+      listsData = null;
+      toast(`Ticked "${todo.text}".`);
+      show(true);
     },
   };
   if (s.screen === 'month') return monthView(t, data, `${s.date.slice(0, 7)}-01`, today(), openDay);
@@ -294,6 +299,9 @@ async function showMore(mine) {
   }
 }
 
+/** @type {import('./views/lists.js').ListsData | null} */
+let listsData = null;
+
 /**
  * Lists: the overview, or one list (saved copy first). Ticks and new items update the saved copy
  * directly, so the screen stays instant; everything else reloads from the server.
@@ -301,18 +309,25 @@ async function showMore(mine) {
  * @param {State} s
  */
 async function showLists(mine, s) {
-  const saved = cache.read('lists');
+  const saved = listsData ? { at: Date.now(), data: listsData } : cache.read('lists');
+  listsData = saved?.data ?? { lists: [], items: [], events: [] };
   /** @type {import('./views/lists.js').ListsScreen} */
   const screen = {
     ctx: formContext(),
-    data: saved?.data ?? { lists: [], items: [], events: [] },
+    // One copy shared by every visit to Lists, so saves still running from an earlier visit (a new
+    // list, new items) land in what is on screen now.
+    get data() { return /** @type {import('./views/lists.js').ListsData} */ (listsData); },
+    set data(v) { listsData = v; },
     open: (listId) => go({ screen: 'lists', list: listId }),
-    redraw: () => { if (mine === showing) $('main').replaceChildren(drawIt()); },
-    // A list change can change what the calendar shows under "To do", so saved months are dropped too.
-    persist: () => { cache.write('lists', screen.data); cache.clearCalendar(); },
+    redraw: () => { if (readState().screen === 'lists') $('main').replaceChildren(drawIt()); },
+    // A list change can change what the calendar shows under "To do": saved months stay, but refresh.
+    persist: () => { cache.write('lists', screen.data); cache.staleCalendar(); },
     reload: () => { if (mine === showing) show(true); },
+    // A new list got its real id: point the address at it without drawing again.
+    renamed: (from, to) => { if (location.hash.endsWith(`/${from}`)) history.replaceState(null, '', location.hash.replace(`/${from}`, `/${to}`)); },
   };
-  const drawIt = () => (s.list ? listDetail(screen, s.list, today()) : listsOverview(screen));
+  // The address, not `s`: a new list's id changes once it is saved.
+  const drawIt = () => { const list = readState().list; return list ? listDetail(screen, list, today()) : listsOverview(screen); };
   const savedView = saved ? drawSaved(drawIt) : null;
   if (savedView) $('main').replaceChildren(savedView);
   else $('main').replaceChildren(el('p', { class: 'muted' }, 'Loading…'));
@@ -320,7 +335,10 @@ async function showLists(mine, s) {
     const r = await call('lists.all');
     if (mine !== showing) return;
     if (!r.ok) throw new Error(r.errors.map((e) => e.message).join('; '));
-    screen.data = r.data;
+    // Lists and items still being saved are kept: the server does not know them yet.
+    screen.data = { ...r.data,
+      lists: [...r.data.lists, ...screen.data.lists.filter((l) => isUnsaved(l.list_id))],
+      items: [...r.data.items, ...screen.data.items.filter((i) => isUnsaved(i.item_id))] };
     cache.write('lists', r.data);
     // Keep what is being typed: only redraw if the quick-add box is empty.
     const typing = /** @type {HTMLInputElement|null} */ (document.querySelector('.add-input'))?.value;

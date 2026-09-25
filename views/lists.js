@@ -16,7 +16,7 @@ import { field, input, select, chips, saveButton, busy } from './fields.js';
  * @typedef {{ event_id: string, title: string, start_date: string, participants: string[] }} LinkableEvent
  * @typedef {{ lists: List[], items: Item[], events: LinkableEvent[] }} ListsData
  * @typedef {{ ctx: import('./forms.js').FormContext, data: ListsData, open: (listId: string|null) => void,
- *   redraw: () => void, persist: () => void, reload: () => void }} ListsScreen
+ *   redraw: () => void, persist: () => void, reload: () => void, renamed: (from: string, to: string) => void }} ListsScreen
  */
 
 /** @param {LinkableEvent|undefined} e */
@@ -44,17 +44,55 @@ function listSheet(screen, list) {
     field('Belongs to an event (optional)', event.node),
     el('div', { class: 'actions' }, saveButton(list ? 'Save' : 'Create list', async () => {
       const values = { title: title.get(), event_id: event.get() };
-      const r = list
-        ? await screen.ctx.call('lists.update', { list_id: list.list_id, changes: values })
-        : await screen.ctx.call('lists.add', values);
-      if (!r.ok) { showIssues(sheet.messages, r); return; }
+      if (list) {
+        const r = await screen.ctx.call('lists.update', { list_id: list.list_id, changes: values });
+        if (!r.ok) { showIssues(sheet.messages, r); return; }
+        sheet.close();
+        toast(`Saved "${values.title}".`);
+        screen.reload();
+        return;
+      }
+      if (!values.title) { showIssues(sheet.messages, { errors: [{ field: 'title', message: 'give the list a name' }], warnings: [] }); return; }
       sheet.close();
-      toast(list ? `Saved "${values.title}".` : `Created "${values.title}".`);
-      if (!list) screen.open(r.data.list.list_id);
-      screen.reload();
+      createList(screen, values.title, values.event_id || null);
     })));
   const sheet = openSheet(list ? 'Edit list' : 'New list', form);
   if (!list) title.node.focus();
+}
+
+/**
+ * Shows a new list at once and saves it behind (RT, 2026-09-25). Items added before the server
+ * answers wait in the same queue, so they are saved into the list once it has its real id.
+ * @param {ListsScreen} screen
+ * @param {string} title
+ * @param {string|null} eventId
+ */
+function createList(screen, title, eventId) {
+  /** @type {List} */
+  const list = { list_id: newId(), title, event_id: eventId, status: 'ACTIVE', created_at: new Date().toISOString(), created_by: 'you', done: 0, total: 0 };
+  const tempId = list.list_id;
+  screen.data.lists.push(list);
+  screen.persist();
+  screen.open(tempId);
+  enqueue(async () => {
+    try {
+      const r = await screen.ctx.call('lists.add', { title, event_id: eventId });
+      if (!r.ok) throw new Error(r.errors.map((e) => e.message).join('; '));
+      Object.assign(list, r.data.list);
+      screen.data.items.filter((i) => i.list_id === tempId).forEach((i) => { i.list_id = list.list_id; });
+      if (!screen.data.lists.some((l) => l.list_id === list.list_id)) screen.data.lists.push(list);
+      screen.persist();
+      screen.renamed(tempId, list.list_id);
+      screen.redraw();
+    } catch (e) {
+      screen.data.lists = screen.data.lists.filter((l) => l !== list);
+      screen.data.items = screen.data.items.filter((i) => i.list_id !== tempId);
+      toast(`Could not create "${title}": ${message(e)}`);
+      screen.open(null);
+    } finally {
+      unsaved.delete(tempId);
+    }
+  });
 }
 
 /**
@@ -75,6 +113,7 @@ function itemSheet(screen, item) {
         const values = { text: text.get(), owner: owner.get(), due_date: due.get(), notes: notes.get() };
         const changes = Object.fromEntries(Object.entries(values).filter(([k, v]) => JSON.stringify(v) !== JSON.stringify(/** @type {any} */ (item)[k] ?? (Array.isArray(v) ? [] : null))));
         if (Object.keys(changes).length === 0) { sheet.close(); return; }
+        await saving; // a new item gets its real id first
         const r = await screen.ctx.call('listItems.update', { item_id: item.item_id, changes });
         if (!r.ok) { showIssues(sheet.messages, r); return; }
         Object.assign(item, r.data.item);
@@ -83,7 +122,7 @@ function itemSheet(screen, item) {
         screen.redraw();
       }),
       el('button', { class: 'danger', type: 'button', onclick: async (/** @type {Event} */ ev) => {
-        const r = await busy(/** @type {HTMLButtonElement} */ (ev.currentTarget), () => screen.ctx.call('listItems.setStatus', { item_id: item.item_id, status: 'REMOVED' }));
+        const r = await busy(/** @type {HTMLButtonElement} */ (ev.currentTarget), async () => { await saving; return screen.ctx.call('listItems.setStatus', { item_id: item.item_id, status: 'REMOVED' }); });
         if (!r.ok) { showIssues(sheet.messages, r); return; }
         screen.data.items = screen.data.items.filter((i) => i.item_id !== item.item_id);
         sheet.close();
@@ -94,8 +133,79 @@ function itemSheet(screen, item) {
   const sheet = openSheet('Edit item', form);
 }
 
-/** Ticks are saved one at a time, in order, so quick taps never race. */
+/** Changes are saved one at a time, in order, so quick taps never race. */
 let saving = Promise.resolve();
+/** @param {() => Promise<void>} job */
+const enqueue = (job) => { saving = saving.then(job); };
+
+/** Ids of lists and items shown before the server has saved them. */
+const unsaved = new Set();
+let counter = 0;
+const newId = () => { const id = `new-${Date.now()}-${++counter}`; unsaved.add(id); return id; };
+/** @param {string} id */
+export const isUnsaved = (id) => unsaved.has(id);
+/** @param {unknown} e */
+const message = (e) => (e instanceof Error ? e.message : String(e));
+
+/**
+ * Shows new items at once and saves them behind, in one request however many there are
+ * (RT, 2026-09-25). If the save fails they are taken off again and the text is offered back.
+ * @param {ListsScreen} screen
+ * @param {List} list
+ * @param {string[]} texts
+ */
+function addItems(screen, list, texts) {
+  const lines = texts.map((t) => t.trim()).filter(Boolean);
+  if (lines.length === 0) return;
+  /** @type {Item[]} */
+  const items = lines.map((text) => ({ item_id: newId(), list_id: list.list_id, text, owner: [], due_date: null, notes: null, status: 'OPEN', done_at: null, done_by: null }));
+  const tempIds = items.map((i) => i.item_id);
+  screen.data.items.push(...items);
+  screen.redraw();
+  enqueue(async () => {
+    try {
+      if (isUnsaved(list.list_id)) throw new Error('the list was not created');
+      const r = lines.length === 1
+        ? await screen.ctx.call('listItems.add', { list_id: list.list_id, text: lines[0] })
+        : await screen.ctx.call('listItems.addMany', { list_id: list.list_id, texts: lines });
+      if (!r.ok) throw new Error(r.errors.map((e) => e.message).join('; '));
+      /** @type {Item[]} */
+      const saved = lines.length === 1 ? [r.data.item] : r.data.items;
+      items.forEach((item, n) => {
+        const done = { status: item.status, done_at: item.done_at, done_by: item.done_by };
+        Object.assign(item, saved[n], done);
+        if (!screen.data.items.some((i) => i.item_id === item.item_id)) screen.data.items.push(item);
+      });
+      screen.persist();
+    } catch (e) {
+      screen.data.items = screen.data.items.filter((i) => !items.includes(i));
+      screen.redraw();
+      toast(`Could not add ${lines.length === 1 ? `"${lines[0]}"` : `${lines.length} items`}: ${message(e)}`);
+    } finally {
+      tempIds.forEach((id) => unsaved.delete(id));
+      screen.redraw();
+    }
+  });
+}
+
+/**
+ * Several items at once: one per line, as written or pasted from a note.
+ * @param {ListsScreen} screen
+ * @param {List} list
+ */
+function severalSheet(screen, list) {
+  const box = /** @type {HTMLTextAreaElement} */ (el('textarea', { rows: '8', placeholder: 'One item per line, e.g.\nRice\nToothpaste\nChargers' }));
+  const form = el('div', { class: 'form' },
+    field('Items', box),
+    el('div', { class: 'actions' }, el('button', { class: 'primary', type: 'button', onclick: () => {
+      const lines = box.value.split(/\r?\n/).map((l) => l.replace(/^\s*(?:[-*•]|\[ ?\]|\d+[.)])\s*/, '').trim()).filter(Boolean);
+      if (lines.length === 0) { box.focus(); return; }
+      sheet.close();
+      addItems(screen, list, lines);
+    } }, 'Add items')));
+  const sheet = openSheet(`Add to ${list.title}`, form);
+  box.focus();
+}
 
 /**
  * Ticks or unticks at once on the phone, then saves; undoes the tick if the save fails.
@@ -107,7 +217,9 @@ function toggle(screen, item) {
   const status = item.status === 'DONE' ? 'OPEN' : 'DONE';
   Object.assign(item, { status, done_at: status === 'DONE' ? new Date().toISOString() : null, done_by: status === 'DONE' ? 'you' : null });
   screen.redraw();
-  saving = saving.then(async () => {
+  enqueue(async () => {
+    // An item whose own save failed has gone already.
+    if (!screen.data.items.includes(item)) return;
     try {
       const r = await screen.ctx.call('listItems.setStatus', { item_id: item.item_id, status });
       if (!r.ok) throw new Error(r.errors.map((e) => e.message).join('; '));
@@ -116,7 +228,7 @@ function toggle(screen, item) {
     } catch (e) {
       Object.assign(item, before);
       screen.redraw();
-      toast(`Could not save the tick: ${e instanceof Error ? e.message : String(e)}`);
+      toast(`Could not save the tick: ${message(e)}`);
     }
   });
 }
@@ -136,8 +248,8 @@ function itemRow(screen, item, today) {
     item.notes ?? '',
     done && item.done_by ? `ticked by ${item.done_by}` : '',
   ].filter(Boolean).join(' · ');
-  return el('li', { class: `list-item${done ? ' done' : ''}` },
-    el('button', { class: 'tick', type: 'button', 'aria-pressed': String(done), 'aria-label': done ? 'Untick' : 'Tick', onclick: () => toggle(screen, item) }, done ? '✓' : ''),
+  return el('li', { class: `list-item${done ? ' done' : ''}${isUnsaved(item.item_id) ? ' saving' : ''}` },
+    el('button', { class: 'tick', type: 'button', 'aria-pressed': String(done), 'aria-label': done ? 'Untick' : 'Tick', onclick: () => toggle(screen, item) }),
     el('div', { class: 'list-item-body', onclick: () => itemSheet(screen, item) },
       el('div', { class: 'list-item-text' }, item.text),
       meta ? el('div', { class: `details${overdue ? ' overdue' : ''}` }, meta) : ''));
@@ -184,26 +296,30 @@ export function listDetail(screen, listId, today) {
   const event = list.event_id ? screen.data.events.find((e) => e.event_id === list.event_id) : undefined;
 
   const newText = /** @type {HTMLInputElement} */ (el('input', { type: 'text', placeholder: 'Add an item', enterkeyhint: 'done', class: 'add-input' }));
-  const addButton = /** @type {HTMLButtonElement} */ (el('button', { class: 'primary', type: 'button' }, 'Add'));
-  const addItem = async () => {
+  const add = () => {
     const text = newText.value.trim();
     if (!text) { newText.focus(); return; }
-    const r = await busy(addButton, () => screen.ctx.call('listItems.add', { list_id: listId, text }));
-    if (!r.ok) { toast(r.errors.map((e) => e.message).join('; ')); return; }
-    screen.data.items.push(r.data.item);
-    screen.persist();
-    screen.redraw();
+    newText.value = '';
+    addItems(screen, list, [text]);
     // Ready for the next item, as when writing a shopping list.
     setTimeout(() => /** @type {HTMLInputElement|null} */ (document.querySelector('.add-input'))?.focus(), 0);
   };
-  addButton.addEventListener('click', addItem);
-  newText.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addItem(); } });
+  newText.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } });
+  // Pasting several lines (e.g. from a note) adds one item per line.
+  newText.addEventListener('paste', (e) => {
+    const text = e.clipboardData?.getData('text') ?? '';
+    const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    if (lines.length < 2) return;
+    e.preventDefault();
+    addItems(screen, list, lines);
+  });
 
   return el('div', { class: 'list-detail' },
     el('button', { class: 'link back', type: 'button', onclick: () => screen.open(null) }, '‹ All lists'),
     el('h2', { class: 'list-title' }, list.title, list.status === 'ARCHIVED' ? el('span', { class: 'tag' }, 'archived') : ''),
     event ? el('div', { class: 'details' }, `For ${eventText(event)}`) : '',
-    el('div', { class: 'add-row' }, newText, addButton),
+    el('div', { class: 'add-row' }, newText, el('button', { class: 'primary', type: 'button', onclick: add }, 'Add')),
+    el('button', { class: 'link add-several', type: 'button', onclick: () => severalSheet(screen, list) }, '+ Add several at once'),
     open.length ? el('ul', { class: 'list-items' }, open.map((i) => itemRow(screen, i, today))) : el('p', { class: 'muted' }, items.length ? 'All done.' : 'Nothing on this list yet.'),
     done.length ? el('details', { class: 'done-items' }, el('summary', { class: 'muted' }, `Done (${done.length})`),
       el('ul', { class: 'list-items' }, done.map((i) => itemRow(screen, i, today)))) : '',
