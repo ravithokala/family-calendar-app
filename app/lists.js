@@ -3,7 +3,7 @@
 import { call } from '../api.js';
 import * as cache from '../cache.js';
 import { el } from '../dom.js';
-import { listsOverview, listDetail, isUnsaved } from '../views/lists.js';
+import { listsOverview, listDetail, isUnsaved, hasPendingSaves } from '../views/lists.js';
 import { toast } from '../views/sheet.js';
 import { formContext } from './context.js';
 import { $, app, go, readState, today, FRESH_MS, isCurrent, drawSaved, showError } from './state.js';
@@ -19,7 +19,7 @@ let listsData = null;
 export const currentLists = () => listsData ?? cache.read('lists')?.data ?? null;
 
 /** Whether a new list or item is still being saved. */
-const busySaving = () => Boolean(listsData && (listsData.lists.some((l) => isUnsaved(l.list_id)) || listsData.items.some((i) => isUnsaved(i.item_id))));
+const busySaving = () => hasPendingSaves() || Boolean(listsData && (listsData.lists.some((l) => isUnsaved(l.list_id)) || listsData.items.some((i) => isUnsaved(i.item_id))));
 
 /**
  * Takes lists fetched in the background (after the calendar), unless something is still being saved.
@@ -28,6 +28,40 @@ const busySaving = () => Boolean(listsData && (listsData.lists.some((l) => isUns
 export function acceptBackgroundLists(data) {
   cache.write('lists', data);
   if (!busySaving()) listsData = data;
+}
+
+/** While Lists is open, the server is asked this often for changes from the other phone. */
+const POLL_MS = 30 * 1000;
+/** @type {number|undefined} */
+let polling;
+
+/**
+ * Asks for the lists every POLL_MS while Lists is on screen and the app is in front, and redraws
+ * only when something changed, and not while typing or while a sheet is open (RT, 2026-09-25:
+ * shopping from the same list on two phones).
+ * @param {number} mine
+ * @param {() => HTMLElement} drawIt
+ */
+function pollWhileOpen(mine, drawIt) {
+  clearInterval(polling);
+  polling = window.setInterval(async () => {
+    if (!isCurrent(mine) || readState().screen !== 'lists') { clearInterval(polling); return; }
+    if (document.visibilityState !== 'visible' || document.querySelector('dialog[open]') || busySaving()) return;
+    if (/** @type {HTMLInputElement|null} */ (document.querySelector('.add-input'))?.value) return;
+    try {
+      const r = await call('lists.all', {});
+      if (!r.ok || !isCurrent(mine) || busySaving()) return;
+      const changed = JSON.stringify(r.data) !== JSON.stringify(listsData);
+      cache.write('lists', r.data);
+      if (!changed) return;
+      listsData = r.data;
+      if (!document.querySelector('dialog[open]') && !(/** @type {HTMLInputElement|null} */ (document.querySelector('.add-input'))?.value)) {
+        $('main').replaceChildren(drawIt());
+      }
+    } catch (e) {
+      // The next check tries again.
+    }
+  }, POLL_MS);
 }
 
 /**
@@ -60,6 +94,7 @@ export async function showLists(mine, force = false, fresh = false) {
   const savedView = saved ? drawSaved(drawIt) : null;
   if (savedView) $('main').replaceChildren(savedView);
   else $('main').replaceChildren(el('p', { class: 'muted' }, 'Loading…'));
+  pollWhileOpen(mine, drawIt);
   // Just loaded (e.g. in the background after the calendar): nothing to ask (RT, 2026-09-25).
   if (saved && savedView && !force && Date.now() - saved.at < FRESH_MS) return;
   try {

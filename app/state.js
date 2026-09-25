@@ -78,8 +78,12 @@ export const FRESH_MS = 60 * 1000;
 
 /** Guards against an older request finishing after a newer one. */
 let showing = 0;
+/** When the current screen was last drawn, to refresh it when the app comes back (RT, 2026-09-25). */
+let shownAt = Date.now();
 /** Starts drawing a screen; returns its turn. */
-export const nextTurn = () => ++showing;
+export const nextTurn = () => { shownAt = Date.now(); return ++showing; };
+/** How long ago the current screen was drawn. */
+export const shownAgo = () => Date.now() - shownAt;
 /** @param {number} mine */
 export const isCurrent = (mine) => mine === showing;
 

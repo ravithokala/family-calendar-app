@@ -150,7 +150,14 @@ async function bringBack(screen, item) {
 /** Changes are saved one at a time, in order, so quick taps never race. */
 let saving = Promise.resolve();
 /** @param {() => Promise<void>} job */
-const enqueue = (job) => { saving = saving.then(job); };
+const enqueue = (job) => {
+  pending += 1;
+  saving = saving.then(job).finally(() => { pending -= 1; });
+};
+/** How many changes are still waiting to be saved. */
+let pending = 0;
+/** Whether any tick, new item or new list is still being saved. */
+export const hasPendingSaves = () => pending > 0;
 
 /** Ids of lists and items shown before the server has saved them. */
 const unsaved = new Set();
