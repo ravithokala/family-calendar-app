@@ -1,7 +1,7 @@
 // @ts-check
 
 import { el, longDate } from '../dom.js';
-import { openSheet, showIssues, toast } from './sheet.js';
+import { openSheet, showIssues } from './sheet.js';
 import { field, input, select, checkbox, chips, saveButton, busy } from './fields.js';
 import { timeText } from './parts.js';
 
@@ -109,40 +109,6 @@ export function eventSheet(ctx, from) {
 }
 
 /**
- * The event as a short message, for WhatsApp or texts (ADR-092): who and what, when, where. Notes
- * stay out: they may be private.
- * @param {AppItem} item
- * @param {string} when  e.g. "Tuesday 3 November"
- */
-export function shareText(item, when) {
-  return [
-    `${item.participants.length ? `${item.participants.join('+')} - ` : ''}${item.title}`,
-    `${when}${timeText(item) ? `, ${timeText(item)}` : ''}`,
-    item.location ? `Where: ${item.location}` : '',
-  ].filter(Boolean).join('\n');
-}
-
-/**
- * Opens the phone's share sheet with the event, or copies it where sharing is not available.
- * @param {AppItem} item
- * @param {string} when
- */
-async function shareEvent(item, when) {
-  const text = shareText(item, when);
-  try {
-    if (navigator.share) {
-      await navigator.share({ text });
-      return;
-    }
-    await navigator.clipboard.writeText(text);
-    toast('Copied: paste it into a message.');
-  } catch (e) {
-    // Closing the share sheet is not an error.
-    if (!(e instanceof DOMException && e.name === 'AbortError')) toast(`Could not share: ${e instanceof Error ? e.message : String(e)}`);
-  }
-}
-
-/**
  * An event's details, with Edit and Cancel.
  * @param {FormContext} ctx
  * @param {import('./parts.js').Theme} theme
@@ -167,7 +133,6 @@ export function eventDetails(ctx, theme, item, date) {
       `☑ ${l.title} · ${l.total ? `${l.done} of ${l.total} done` : 'empty'}`)),
     el('div', { class: 'actions' },
       el('button', { class: 'primary', type: 'button', onclick: () => { sheet.close(); eventSheet(ctx, { item }); } }, 'Edit'),
-      el('button', { class: 'secondary', type: 'button', onclick: () => shareEvent(item, when) }, 'Share'),
       el('button', { class: 'danger', type: 'button', onclick: async (/** @type {Event} */ ev) => {
         // No "are you sure?": the message offers Undo instead (ADR-087).
         const r = await busy(/** @type {HTMLButtonElement} */ (ev.currentTarget), () => ctx.call('events.cancel', { event_id: item.event_id }));

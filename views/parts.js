@@ -19,7 +19,8 @@ import { el } from '../dom.js';
  *   related_people?: string[], notes?: string|null, status?: string }} AppReminder
  * @typedef {{ item_id: string, list_id: string, list_title: string, text: string, owner: string[], due_date: string, notes: string|null }} Todo
  * @typedef {{ from: string, to: string, days: AppDay[], reminders: AppReminder[], pending: number, todos: Todo[] }} DaysData  one filter's days
- * @typedef {{ from: string, to: string, views: Record<string, { days: AppDay[], reminders: AppReminder[], todos?: Todo[] }>, pending: number }} AllDays
+ * @typedef {{ from: string, to: string, views: Record<string, { days: AppDay[], reminders: AppReminder[], todos?: Todo[] }>, pending: number,
+ *   print_due?: { month: string } | null }} AllDays
  * @typedef {{ background: string, text: string, bar?: string }} Tone
  * @typedef {{ tones: Record<string, Tone>, icons: Record<string, string>, shades: Record<string, string>,
  *   periodLabels: Record<string, string> }} Theme

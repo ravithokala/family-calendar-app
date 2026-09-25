@@ -2,7 +2,8 @@
 
 import { call, lastTiming } from '../api.js';
 import * as cache from '../cache.js';
-import { el, addDays, addMonths, niceDate } from '../dom.js';
+import { el, addDays, addMonths, niceDate, monthTitle } from '../dom.js';
+import { printSheet } from '../views/print.js';
 import { daySection, remindersOn, todoSection } from '../views/parts.js';
 import { monthView, monthRange, fetchRangeFor } from '../views/month.js';
 import { eventDetails } from '../views/forms.js';
@@ -55,10 +56,12 @@ function draw(s, all) {
       app.show(true);
     },
   };
+  // From the 25th until printed, a reminder at the top of Month and Today (ADR-093).
+  const due = all.print_due && (s.screen === 'month' || s.screen === 'today') ? printReminder(all.print_due.month) : '';
   if (s.screen === 'month') {
     const monthStart = `${s.date.slice(0, 7)}-01`;
     // The month's reminders under the grid, as on the printed page (ADR-089).
-    return el('div', {}, monthView(t, data, monthStart, today(), openDay, s.view), monthReminders(ctx, data.reminders, monthStart, today()));
+    return el('div', {}, due, monthView(t, data, monthStart, today(), openDay, s.view), monthReminders(ctx, data.reminders, monthStart, today()));
   }
   if (s.screen === 'week') {
     return el('div', {}, data.days.map((d) => [el('div', { 'data-date': d.date }, daySection(t, niceDate(d.date), d, { onTitle: () => openDay(d.date), onItem: onItem(d.date) })),
@@ -73,11 +76,23 @@ function draw(s, all) {
   }
   const tomorrow = addDays(data.from, 1);
   return el('div', {},
+    due,
     todoSection(data.todos.filter((x) => x.due_date < data.from), todoActions, 'Overdue'),
     daySection(t, `Today · ${niceDate(data.from)}`, byDate.get(data.from), { onTitle: () => openDay(data.from), onItem: onItem(data.from) }),
     todoSection(data.todos.filter((x) => x.due_date === data.from), todoActions),
     daySection(t, `Tomorrow · ${niceDate(tomorrow)}`, byDate.get(tomorrow), { onTitle: () => openDay(tomorrow), onItem: onItem(tomorrow) }),
     remindersOn(data.reminders, data.from));
+}
+
+/**
+ * "October's calendars are ready to print", with a button that opens printing for that month.
+ * @param {string} month  YYYY-MM
+ */
+function printReminder(month) {
+  const name = monthTitle(`${month}-01`).split(' ')[0];
+  return el('div', { class: 'msg warning print-due' },
+    el('span', {}, `🖨 ${name}'s calendars are ready to print.`),
+    el('button', { class: 'link', type: 'button', onclick: () => printSheet(formContext(), today(), month) }, `Print ${name}`));
 }
 
 /**

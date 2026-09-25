@@ -34,6 +34,8 @@ export function printSheet(ctx, today, chosen) {
       result.replaceChildren(el('ul', { class: 'links' },
         r.data.files.map((/** @type {{ name: string, url: string }} */ f) => el('li', {}, el('a', { href: f.url, target: '_blank', rel: 'noopener' }, f.name))),
         el('li', {}, el('a', { href: r.data.folder_url, target: '_blank', rel: 'noopener' }, 'Open the folder'))));
+      // The screen behind refreshes, so the print reminder goes (ADR-093); warnings are shown above already.
+      ctx.saved('PDFs saved to Drive.', { ...r, warnings: [] });
     })),
     result);
   const sheet = openSheet('Print a month', form);
