@@ -40,7 +40,7 @@ function bySchool(periods) {
  */
 export function schoolsSection(ctx, periods, today) {
   const schools = bySchool(periods);
-  return el('section', {},
+  return el('section', { id: 'school-dates' },
     el('div', { class: 'section-head' }, el('h2', {}, 'School dates'),
       el('button', { class: 'link', type: 'button', onclick: () => schoolSheet(ctx, schools) }, '+ Add dates')),
     schools.length === 0 ? el('p', { class: 'muted small' }, 'No school dates yet.') : '',

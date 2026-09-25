@@ -509,6 +509,34 @@ async function loadMeta() {
   apply(r.data);
 }
 
+/** A swipe must travel this far sideways, and mostly sideways, to turn the page. */
+const SWIPE_PX = 60;
+
+/**
+ * Swipe left or right on Month, Week and Day for the next or previous one, as › and ‹ (ADR-090).
+ * Vertical scrolling is left alone: a swipe must be mostly sideways and quick.
+ */
+function enableSwipe() {
+  /** @type {{ x: number, y: number, at: number } | null} */
+  let start = null;
+  $('main').addEventListener('touchstart', (/** @type {TouchEvent} */ e) => {
+    start = e.touches.length === 1 ? { x: e.touches[0].clientX, y: e.touches[0].clientY, at: Date.now() } : null;
+  }, { passive: true });
+  $('main').addEventListener('touchend', (/** @type {TouchEvent} */ e) => {
+    const from = start;
+    start = null;
+    const s = readState();
+    if (!from || !['month', 'week', 'day'].includes(s.screen)) return;
+    const end = e.changedTouches[0];
+    const dx = end.clientX - from.x;
+    const dy = end.clientY - from.y;
+    if (Math.abs(dx) < SWIPE_PX || Math.abs(dx) < 2 * Math.abs(dy) || Date.now() - from.at > 800) return;
+    const f = frame(s);
+    const to = dx < 0 ? f.next : f.prev;
+    if (to) go({ date: to });
+  }, { passive: true });
+}
+
 function showSignedIn() {
   $('signin').hidden = true;
   $('chrome').hidden = false;
@@ -521,6 +549,7 @@ function showSignedIn() {
     'data-screen': screen,
     onclick: () => go({ screen, date: screen === 'today' ? today() : readState().date }),
   }, screen[0].toUpperCase() + screen.slice(1))));
+  enableSwipe();
   // Tapping the title shows the app's version (RT, 2026-09-25). Last, and guarded: an old page
   // without the title's id must not stop the buttons above from working.
   const title = document.getElementById('app-title');

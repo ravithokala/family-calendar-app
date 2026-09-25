@@ -1,6 +1,6 @@
 // @ts-check
 
-import { el } from '../dom.js';
+import { el, fullDate } from '../dom.js';
 import { routineSheet } from './forms.js';
 
 import { VERSION } from '../version.js';
@@ -16,7 +16,8 @@ import { removedSection } from './removed.js';
  * @param {import('./forms.js').FormContext} ctx
  * @param {{ activities: any[], schedules: any[],
  *   sources: import('./sources.js').SourceSummary[], pending: number, periods: import('./schools.js').Period[],
- *   undoable?: Record<string, string>, removed?: import('./removed.js').Removed }} data
+ *   undoable?: Record<string, string>, removed?: import('./removed.js').Removed,
+ *   notices?: Array<{ school_id: string, school_name: string|null, person: string|null, last_date: string }> }} data
  * @param {{ openReview: () => void, today: string }} nav
  */
 export function moreView(ctx, data, nav) {
@@ -34,8 +35,16 @@ export function moreView(ctx, data, nav) {
         a.term_time_only ? 'term time' : '',
       ].filter(Boolean).join(' · '))));
 
+  // School dates about to run out (ADR-090): term-time routines stop without them.
+  const notices = (data.notices ?? []).map((n) => el('div', { class: 'msg warning notice' },
+    el('div', {}, n.last_date
+      ? `${n.person ?? 'A child'}'s school dates ${n.last_date < nav.today ? 'ended' : 'end'} ${fullDate(n.last_date)}. Add the next school year's dates so term-time routines continue.`
+      : `${n.person ?? 'A child'}'s school has no dates. Add them so term-time routines appear.`),
+    el('button', { class: 'link', type: 'button', onclick: () => document.getElementById('school-dates')?.scrollIntoView({ behavior: 'smooth' }) }, 'Go to School dates')));
+
   return el('div', {},
     messages,
+    notices,
     el('section', {},
       el('div', { class: 'section-head' }, el('h2', {}, 'Review and sources'),
         el('button', { class: 'link', type: 'button', onclick: () => sourceSheet(ctx, data.activities) }, '+ Add a source')),
