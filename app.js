@@ -236,21 +236,6 @@ function drawSaved(drawIt) {
   }
 }
 
-/** Set by the Today button: the next calendar drawn scrolls to today and briefly highlights it. */
-let pointToToday = false;
-
-/** @param {boolean} last  the final drawing of this screen (a saved copy may be redrawn fresh) */
-function pointAtToday(last) {
-  if (!pointToToday) return;
-  if (last) pointToToday = false;
-  const target = document.querySelector('.cell.today') ?? document.querySelector(`[data-date="${today()}"]`);
-  if (!target) return;
-  target.scrollIntoView({ block: 'center' });
-  target.classList.remove('flash');
-  void (/** @type {HTMLElement} */ (target)).offsetWidth; // restart the highlight
-  target.classList.add('flash');
-}
-
 /** Guards against an older request finishing after a newer one. */
 let showing = 0;
 /** A saved screen younger than this is shown without asking the server again. */
@@ -264,11 +249,6 @@ async function show(force = false) {
   document.querySelectorAll('#tabs button').forEach((b) => b.setAttribute('aria-current', String(b.getAttribute('data-screen') === s.screen)));
   document.querySelectorAll('#filters button').forEach((b) => b.setAttribute('aria-pressed', String(b.getAttribute('data-view') === s.view)));
   $('title').textContent = f.title;
-  // "This month" / "This week" only once you have moved away; the Today tab is the bottom bar's (RT, 2026-09-25).
-  const t = today();
-  const showsToday = s.screen === 'month' ? s.date.slice(0, 7) === t.slice(0, 7) : f.from <= t && t <= f.to;
-  $('today-button').hidden = s.screen === 'today' || showsToday;
-  $('today-button').textContent = s.screen === 'month' ? 'This month' : s.screen === 'week' ? 'This week' : 'Today';
   $('print-button').hidden = s.screen !== 'month';
   $('print-button').onclick = () => printSheet(formContext(), today(), s.date.slice(0, 7));
   $('prev').hidden = f.prev === null;
@@ -277,7 +257,6 @@ async function show(force = false) {
   $('next').onclick = () => f.next && go({ date: f.next });
   $('filters').hidden = s.screen === 'more' || s.screen === 'review' || s.screen === 'lists';
   if (s.screen === 'more' || s.screen === 'review' || s.screen === 'lists') {
-    $('today-button').hidden = true;
     $('print-button').hidden = true;
     await (s.screen === 'more' ? showMore(mine) : s.screen === 'lists' ? showLists(mine, s) : showReview(mine));
     return;
@@ -295,11 +274,9 @@ async function show(force = false) {
     showPending(saved.data.pending);
     if (!force && Date.now() - saved.at < FRESH_MS) {
       $('main').replaceChildren(savedView, refreshLink(`Updated ${clock(saved.at)}`));
-      pointAtToday(true);
       return;
     }
     $('main').replaceChildren(savedView, status);
-    pointAtToday(false);
   } else {
     $('main').replaceChildren(el('p', { class: 'muted' }, 'Loading… (the first load of the day can take a few seconds)'));
   }
@@ -314,7 +291,6 @@ async function show(force = false) {
     const server = lastTiming.server_ms === null ? '' : ` · server ${(lastTiming.server_ms / 1000).toFixed(1)} s`;
     $('main').replaceChildren(draw(s, shown ? shown.data : r.data),
       refreshLink(`Updated ${clock(Date.now())} · ${(lastTiming.total_ms / 1000).toFixed(1)} s${server}`));
-    pointAtToday(true);
   } catch (e) {
     if (mine !== showing) return;
     if (e instanceof AppOutOfDate && reloadForUpdate()) return;
@@ -454,11 +430,6 @@ function showSignedIn() {
     'data-screen': screen,
     onclick: () => go({ screen, date: screen === 'today' ? today() : readState().date }),
   }, screen[0].toUpperCase() + screen.slice(1))));
-  $('today-button').onclick = () => {
-    // Back to the current month, week or day, pointing at today on arrival.
-    pointToToday = true;
-    go({ date: today() });
-  };
   // Tapping the title shows the app's version (RT, 2026-09-25). Last, and guarded: an old page
   // without the title's id must not stop the buttons above from working.
   const title = document.getElementById('app-title');
