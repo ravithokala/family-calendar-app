@@ -44,6 +44,8 @@ main { padding: 8px 12px calc(76px + env(safe-area-inset-bottom)); max-width: 82
 /* Shaded days use the printed pale colours, so their numbers stay dark in dark mode too. */
 .cell.shaded .num, .cell.shaded .more { color: #22252A; }
 .cell .num { font-size: 12px; font-weight: 600; padding: 0 2px; }
+/* "NO SCHOOL", "HALF TERM" as on the printed calendar (RT, 2026-09-25). */
+.cell .school-label { font-size: 8px; font-weight: 800; letter-spacing: 0.02em; line-height: 1.1; padding: 0 2px; color: #22252A; overflow-wrap: anywhere; }
 .cell.today .num { background: var(--today); color: var(--bg); border-radius: 10px; align-self: flex-start; padding: 0 6px; }
 .chip { display: flex; align-items: center; gap: 2px; font-size: 10px; line-height: 1.25; padding: 1px 3px; border-radius: 3px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
@@ -105,7 +107,8 @@ button:disabled { opacity: 0.6; }
 .details-list dt { color: var(--muted); font-size: 14px; }
 .details-list dd { margin: 0; }
 .add-menu { display: flex; flex-direction: column; gap: 10px; padding: 16px 16px calc(24px + env(safe-area-inset-bottom)); }
-.add-menu button { font-size: 17px; padding: 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--soft); cursor: pointer; text-align: left; }
+/* Only the menu's own choices: not Quick Capture's mic and Go (RT, 2026-09-25). */
+.add-menu > button { font-size: 17px; padding: 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--soft); cursor: pointer; text-align: left; }
 .cancelled h3 { font-size: 13px; color: var(--muted); margin: 14px 0 2px; }
 .cancelled s { color: var(--muted); }
 .section-head { display: flex; align-items: center; justify-content: space-between; }
@@ -150,7 +153,7 @@ textarea.prompt { font: 12px/1.35 ui-monospace, Menlo, Consolas, monospace; back
 .school summary { cursor: pointer; }
 .period { display: grid; grid-template-columns: 1.2fr 1fr 1fr auto; gap: 6px; margin-bottom: 6px; align-items: center; }
 .period select, .period input { font: inherit; font-size: 14px; padding: 6px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--text); min-width: 0; }
-.mic { font-size: 20px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--soft); cursor: pointer; }
+.mic { font-size: 20px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--accent); background: var(--bg); cursor: pointer; }
 .mic.on { background: var(--bad); color: #fff; border-color: var(--bad); animation: pulse 1.2s infinite; }
 @keyframes pulse { 50% { opacity: 0.6; } }
 

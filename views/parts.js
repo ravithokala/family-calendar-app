@@ -72,6 +72,27 @@ export function shade(theme, school) {
 }
 
 /**
+ * A month cell's school label, as on the printed calendar (PrintModel.schoolNote): "HALF TERM",
+ * or "R NO SCHOOL" on the family views when only one child is off. C's and R's views already
+ * hold only that child's school days.
+ * @param {Theme} theme
+ * @param {SchoolDay[]} school
+ * @param {boolean} ownChild  the view is one child's
+ */
+export function schoolLabel(theme, school, ownChild) {
+  /** @type {Map<string, string[]>} */
+  const byLabel = new Map();
+  for (const s of school) {
+    const label = s.kind === 'NO_SCHOOL' ? theme.periodLabels.NO_SCHOOL : theme.periodLabels[s.period_type] ?? s.period_type;
+    const people = byLabel.get(label) ?? [];
+    if (!people.includes(s.person)) people.push(s.person);
+    byLabel.set(label, people);
+  }
+  const children = new Set(school.map((s) => s.person));
+  return [...byLabel].map(([label, people]) => (ownChild || people.length >= Math.max(2, children.size) ? label : `${people.join('+')} ${label}`)).join(' · ');
+}
+
+/**
  * "HALF TERM (R)"-style notes for a day.
  * @param {Theme} theme
  * @param {SchoolDay[]} school

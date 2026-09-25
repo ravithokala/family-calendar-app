@@ -172,7 +172,7 @@ function draw(s, all) {
       show(true);
     },
   };
-  if (s.screen === 'month') return monthView(t, data, `${s.date.slice(0, 7)}-01`, today(), openDay);
+  if (s.screen === 'month') return monthView(t, data, `${s.date.slice(0, 7)}-01`, today(), openDay, s.view);
   if (s.screen === 'week') {
     return el('div', {}, data.days.map((d) => [daySection(t, niceDate(d.date), d, { onTitle: () => openDay(d.date), onItem: onItem(d.date) }),
       todoSection(data.todos.filter((x) => x.due_date === d.date), todoActions)]));
