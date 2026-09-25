@@ -13,7 +13,7 @@ import { timeText } from './parts.js';
  * @typedef {{ participants: string[], children: string[], eventTypes: string[], categories: string[], icons: string[], periodTypes: string[],
  *   weekdays: string[], schools: Array<{ school_id: string, school_name: string, person: string }> }} Meta
  * @typedef {{ meta: Meta, call: (action: string, payload?: unknown) => Promise<ApiResponse>,
- *   saved: (message: string, r: ApiResponse) => void, openList?: (listId: string) => void }} FormContext
+ *   saved: (message: string, r: ApiResponse, undo?: () => Promise<ApiResponse>) => void, openList?: (listId: string) => void }} FormContext
  * @typedef {import('./parts.js').AppItem} AppItem
  */
 
@@ -134,12 +134,11 @@ export function eventDetails(ctx, theme, item, date) {
     el('div', { class: 'actions' },
       el('button', { class: 'primary', type: 'button', onclick: () => { sheet.close(); eventSheet(ctx, { item }); } }, 'Edit'),
       el('button', { class: 'danger', type: 'button', onclick: async (/** @type {Event} */ ev) => {
-        const what = item.routine ? `this ${item.title} session only` : `"${item.title}"`;
-        if (!confirm(`Cancel ${what}? It is kept in the history and can be restored.`)) return;
+        // No "are you sure?": the message offers Undo instead (ADR-087).
         const r = await busy(/** @type {HTMLButtonElement} */ (ev.currentTarget), () => ctx.call('events.cancel', { event_id: item.event_id }));
         if (!r.ok) { showIssues(sheet.messages, r); return; }
         sheet.close();
-        ctx.saved(`Cancelled "${item.title}".`, r);
+        ctx.saved(`Cancelled "${item.title}"${item.routine ? ' (this session only)' : ''}.`, r, () => ctx.call('events.restore', { event_id: item.event_id }));
       } }, item.routine ? 'Cancel this session' : 'Cancel event')));
   const sheet = openSheet(item.label, body);
 }

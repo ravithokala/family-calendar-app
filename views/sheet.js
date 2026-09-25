@@ -35,16 +35,23 @@ export function showIssues(target, r) {
 
 let toastTimer = 0;
 
+/** How long an Undo stays offered (ADR-087). */
+const UNDO_MS = 8000;
+
 /**
- * A short message at the bottom of the screen: what was saved, plus any warnings.
+ * A short message at the bottom of the screen: what was saved, plus any warnings, and an Undo
+ * button when what was done takes something away (ADR-087).
  * @param {string} text
  * @param {Array<{ message: string }>} [warnings]
+ * @param {() => void} [undo]
  */
-export function toast(text, warnings = []) {
+export function toast(text, warnings = [], undo) {
   document.getElementById('toast')?.remove();
-  const box = el('div', { id: 'toast', class: warnings.length ? 'has-warnings' : '', onclick: () => box.remove() },
-    el('div', {}, text), warnings.map((w) => el('div', { class: 'warn' }, w.message)));
+  const box = el('div', { id: 'toast', class: `${warnings.length ? 'has-warnings' : ''}${undo ? ' has-undo' : ''}`, onclick: () => box.remove() },
+    el('div', { class: 'toast-row' }, el('div', {}, text),
+      undo ? el('button', { class: 'undo', type: 'button', onclick: (/** @type {Event} */ ev) => { ev.stopPropagation(); box.remove(); undo(); } }, 'Undo') : ''),
+    warnings.map((w) => el('div', { class: 'warn' }, w.message)));
   document.body.append(box);
   clearTimeout(toastTimer);
-  toastTimer = window.setTimeout(() => box.remove(), warnings.length ? 9000 : 3000);
+  toastTimer = window.setTimeout(() => box.remove(), undo ? UNDO_MS : warnings.length ? 9000 : 3000);
 }

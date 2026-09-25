@@ -128,9 +128,23 @@ function itemSheet(screen, item) {
         sheet.close();
         screen.persist();
         screen.redraw();
-        toast(`Removed "${item.text}".`);
+        toast(`Removed "${item.text}".`, [], () => bringBack(screen, item));
       } }, 'Remove')));
   const sheet = openSheet('Edit item', form);
+}
+
+/**
+ * Undo for a removed item (ADR-087): it comes back open, where it was.
+ * @param {ListsScreen} screen
+ * @param {Item} item
+ */
+async function bringBack(screen, item) {
+  const r = await screen.ctx.call('listItems.setStatus', { item_id: item.item_id, status: 'OPEN' });
+  if (!r.ok) { toast(`Could not undo: ${r.errors.map((e) => e.message).join('; ')}`); return; }
+  if (!screen.data.items.some((i) => i.item_id === item.item_id)) screen.data.items.push({ ...item, ...r.data.item });
+  screen.persist();
+  screen.redraw();
+  toast(`"${item.text}" is back.`);
 }
 
 /** Changes are saved one at a time, in order, so quick taps never race. */
@@ -330,7 +344,13 @@ export function listDetail(screen, listId, today) {
         if (!r.ok) { toast(r.errors.map((e) => e.message).join('; ')); return; }
         list.status = status;
         screen.persist();
-        toast(status === 'ARCHIVED' ? `Archived "${list.title}".` : `Reopened "${list.title}".`);
+        toast(status === 'ARCHIVED' ? `Archived "${list.title}".` : `Reopened "${list.title}".`, [], status === 'ARCHIVED' ? async () => {
+          const back = await screen.ctx.call('lists.setStatus', { list_id: listId, status: 'ACTIVE' });
+          if (!back.ok) { toast(`Could not undo: ${back.errors.map((e) => e.message).join('; ')}`); return; }
+          list.status = 'ACTIVE';
+          screen.persist();
+          screen.open(listId);
+        } : undefined);
         if (status === 'ARCHIVED') screen.open(null); else screen.redraw();
       } }, list.status === 'ACTIVE' ? 'Archive list' : 'Reopen list')),
     el('p', { class: 'muted small' }, `Created ${fullDate(list.created_at.slice(0, 10))} by ${list.created_by}.`));

@@ -43,7 +43,7 @@ function openFor(ctx, p, targets, me) {
         const r = await busy(/** @type {HTMLButtonElement} */ (ev.currentTarget), () => ctx.call('events.cancel', { event_id: t.event_id }));
         if (!r.ok) { showIssues(sheet.messages, r); return; }
         sheet.close();
-        ctx.saved(`Cancelled "${t.title}" on ${niceDate(t.start_date)}.`, r);
+        ctx.saved(`Cancelled "${t.title}" on ${niceDate(t.start_date)}.`, r, () => ctx.call('events.restore', { event_id: t.event_id }));
       } }, `Cancel ${niceDate(t.start_date)}${t.start_time ? ` ${t.start_time}` : ''} · ${t.participants.join('+')} · ${t.title}`)));
     const sheet = openSheet('Cancel', el('div', { class: 'form' }, list));
   } else {

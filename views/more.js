@@ -10,13 +10,15 @@ import { sourceSheet, recentSources } from './sources.js';
 import { printSheet } from './print.js';
 import { schoolsSection } from './schools.js';
 import { routineDetail, runningSchedules, scheduleText, endedOn } from './routines.js';
+import { removedSection } from './removed.js';
 
 /**
  * The More screen: review and sources, printing, reminders (add, edit, done, cancel, reopen) and
  * routines (list, add, change, end).
  * @param {import('./forms.js').FormContext} ctx
  * @param {{ reminders: import('./forms.js').Reminder[], activities: any[], schedules: any[],
- *   sources: import('./sources.js').SourceSummary[], pending: number, periods: import('./schools.js').Period[] }} data
+ *   sources: import('./sources.js').SourceSummary[], pending: number, periods: import('./schools.js').Period[],
+ *   undoable?: Record<string, string>, removed?: import('./removed.js').Removed }} data
  * @param {{ openReview: () => void, today: string }} nav
  */
 export function moreView(ctx, data, nav) {
@@ -25,7 +27,7 @@ export function moreView(ctx, data, nav) {
   const setStatus = (r, status, done) => async (/** @type {Event} */ ev) => {
     const answer = await busy(/** @type {HTMLButtonElement} */ (ev.currentTarget), () => ctx.call('reminders.setStatus', { reminder_id: r.reminder_id, status }));
     if (!answer.ok) { showIssues(messages, answer); return; }
-    ctx.saved(done, answer);
+    ctx.saved(done, answer, status === 'ACTIVE' ? undefined : () => ctx.call('reminders.setStatus', { reminder_id: r.reminder_id, status: r.status }));
   };
   const reminders = [...data.reminders].sort((a, b) => a.window_start.localeCompare(b.window_start));
   const active = reminders.filter((r) => r.status === 'ACTIVE');
@@ -49,7 +51,7 @@ export function moreView(ctx, data, nav) {
   const current = routines.filter((a) => runningSchedules(a, data.schedules, nav.today).length > 0);
   const ended = routines.filter((a) => runningSchedules(a, data.schedules, nav.today).length === 0);
   /** @param {any} a @param {boolean} isEnded */
-  const routineRow = (a, isEnded) => el('li', { class: 'item tappable', onclick: () => routineDetail(ctx, a, data.schedules, nav.today) },
+  const routineRow = (a, isEnded) => el('li', { class: 'item tappable', onclick: () => routineDetail(ctx, a, data.schedules, nav.today, data.undoable?.[a.activity_id]) },
     el('div', { class: 'body' },
       el('div', {}, `${a.person} - ${a.name}`),
       el('div', { class: 'details' }, [
@@ -80,5 +82,6 @@ export function moreView(ctx, data, nav) {
       ended.length ? el('details', {}, el('summary', { class: 'muted' }, `Ended (${ended.length})`), el('ul', { class: 'items' }, ended.map((a) => routineRow(a, true)))) : '',
       el('p', { class: 'muted small' }, 'Tap a routine to change it from a date, end it, or change its icon.')),
     schoolsSection(ctx, data.periods, nav.today),
+    data.removed ? removedSection(ctx, data.removed) : '',
     el('p', { class: 'muted small version' }, `Family Cal · version ${VERSION}`));
 }

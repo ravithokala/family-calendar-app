@@ -71,15 +71,30 @@ const formContext = () => ({
   meta,
   call,
   openList: (/** @type {string} */ listId) => go({ screen: 'lists', list: listId }),
-  saved: (message, r) => {
+  saved: (message, r, undo) => {
     // Saved months stay on screen while they refresh, instead of a first-time "Loading…" (RT, 2026-09-25).
     cache.staleCalendar();
     ['more', 'review', 'lists'].forEach(cache.forget);
     listsData = null;
-    toast(message, r.warnings);
+    toast(message, r.warnings, undo && (() => undoSaved(undo)));
     show(true);
   },
 });
+
+/**
+ * Runs an Undo from the message, then refreshes like any save (ADR-087).
+ * @param {() => Promise<import('./api.js').ApiResponse>} undo
+ */
+async function undoSaved(undo) {
+  toast('Undoing…');
+  try {
+    const r = await undo();
+    if (!r.ok) { toast(`Could not undo: ${r.errors.map((e) => e.message).join('; ')}`); return; }
+    formContext().saved('Undone.', r);
+  } catch (e) {
+    toast(`Could not undo: ${e instanceof Error ? e.message : String(e)}`);
+  }
+}
 
 /** @param {number} at */
 const clock = (at) => new Date(at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
@@ -285,15 +300,16 @@ async function showMore(mine) {
   if (savedView) $('main').replaceChildren(savedView, el('p', { class: 'status muted' }, 'Updating…'));
   else $('main').replaceChildren(el('p', { class: 'muted' }, 'Loading…'));
   try {
-    const [reminders, routines, sources, count, schools] = await Promise.all([
-      call('reminders.list'), call('routines.list'), call('sources.list'), call('review.count'), call('schools.list')]);
+    const [reminders, routines, sources, count, schools, removed] = await Promise.all([
+      call('reminders.list'), call('routines.list'), call('sources.list'), call('review.count'), call('schools.list'), call('app.removed')]);
     if (mine !== showing) return;
-    if (!reminders.ok || !routines.ok || !sources.ok || !schools.ok) {
-      throw new Error([...reminders.errors, ...routines.errors, ...sources.errors, ...schools.errors].map((e) => e.message).join('; '));
+    if (!reminders.ok || !routines.ok || !sources.ok || !schools.ok || !removed.ok) {
+      throw new Error([...reminders.errors, ...routines.errors, ...sources.errors, ...schools.errors, ...removed.errors].map((e) => e.message).join('; '));
     }
     const pending = count.ok ? count.data.count : Number($('pending').dataset.count ?? 0);
     showPending(pending);
-    const data = { reminders: reminders.data.reminders, activities: routines.data.activities, schedules: routines.data.schedules, sources: sources.data.sources, pending, periods: schools.data.periods };
+    const data = { reminders: reminders.data.reminders, activities: routines.data.activities, schedules: routines.data.schedules,
+      undoable: routines.data.undoable, sources: sources.data.sources, pending, periods: schools.data.periods, removed: removed.data };
     cache.write('more', data);
     $('main').replaceChildren(draw(data), refreshLink(`Updated ${clock(Date.now())}`));
   } catch (e) {

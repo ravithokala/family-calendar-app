@@ -56,12 +56,16 @@ export function reviewView(ctx, inbox) {
    * @param {string} action
    * @param {Record<string, unknown>} payload
    * @param {string} done
+   * @param {() => Promise<import('../api.js').ApiResponse>} [undo]  offered on the message when the decision takes something away (ADR-087)
    */
-  const decide = (label, cls, action, payload, done) => el('button', { class: cls, type: 'button', onclick: async (/** @type {Event} */ ev) => {
+  const decide = (label, cls, action, payload, done, undo) => el('button', { class: cls, type: 'button', onclick: async (/** @type {Event} */ ev) => {
     const r = await busy(/** @type {HTMLButtonElement} */ (ev.currentTarget), () => ctx.call(action, payload));
-    if (r.ok) ctx.saved(done, r);
+    if (r.ok) ctx.saved(done, r, undo);
     else toast(r.errors.map((e) => e.message).join('; '));
   } }, label);
+
+  /** @param {{ event_id?: string|null }} target */
+  const restore = (target) => () => ctx.call('events.restore', { event_id: target.event_id });
 
   /** @param {ChangeEntry} entry */
   function changeCard({ change, candidate, target, source_title: sourceTitle, similar }) {
@@ -86,10 +90,10 @@ export function reviewView(ctx, inbox) {
         decide('Keep as is', 'secondary', 'review.reject', id, 'Kept as it was.')];
     } else if (change.change_type === 'CANCEL_EVENT' && target) {
       body = [el('div', {}, summary(target))];
-      buttons = [decide('Cancel it', 'danger', 'review.approve', id, `Cancelled "${target.title}".`), decide('Keep it', 'secondary', 'review.reject', id, 'Kept.')];
+      buttons = [decide('Cancel it', 'danger', 'review.approve', id, `Cancelled "${target.title}".`, restore(target)), decide('Keep it', 'secondary', 'review.reject', id, 'Kept.')];
     } else if (target) {
       body = [el('div', {}, summary(target)), el('div', { class: 'muted small' }, 'Not listed by the latest version of this source. It stays on the calendar unless you cancel it.')];
-      buttons = [decide('Keep it', 'secondary', 'review.reject', id, 'Kept.'), decide('Cancel it', 'danger', 'review.approve', id, `Cancelled "${target.title}".`)];
+      buttons = [decide('Keep it', 'secondary', 'review.reject', id, 'Kept.'), decide('Cancel it', 'danger', 'review.approve', id, `Cancelled "${target.title}".`, restore(target))];
     }
     return el('div', { class: 'card' },
       el('div', { class: 'card-head' }, el('strong', {}, LABELS[change.change_type] ?? change.change_type), el('span', { class: 'tag' }, sourceTitle ?? 'source')),
