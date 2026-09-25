@@ -79,8 +79,7 @@ const formContext = () => ({
     // More and Review keep their saved copy too, marked out of date (RT, 2026-09-25).
     cache.stale('more');
     cache.stale('review');
-    cache.forget('lists');
-    listsData = null;
+    cache.stale('lists');
     toast(message, r.warnings, undo && (() => undoSaved(undo)));
     show(true);
   },
@@ -184,8 +183,7 @@ function draw(s, all) {
       if (!r.ok) { toast(r.errors.map((e) => e.message).join('; ')); return; }
       // Only the to-dos changed: keep the saved calendar on screen while it refreshes.
       cache.staleCalendar();
-      cache.forget('lists');
-      listsData = null;
+      cache.stale('lists');
       toast(`Ticked "${todo.text}".`);
       show(true);
     },
@@ -282,6 +280,39 @@ async function prefetchAround(date) {
   }
 }
 
+/** Lists and More are fetched in the background when their copy is older than this. */
+const BACKGROUND_MS = 5 * 60 * 1000;
+
+/**
+ * After the calendar, loads Lists and More in the background when this phone's copy is missing or
+ * more than five minutes old, so switching tabs draws at once (RT, 2026-09-25).
+ */
+async function prefetchScreens() {
+  const old = (/** @type {string} */ key) => { const c = cache.read(key); return !c || Date.now() - c.at > BACKGROUND_MS; };
+  try {
+    if (old('lists') && !prefetching.has('lists')) {
+      prefetching.add('lists');
+      const r = await call('lists.all');
+      if (r.ok) {
+        cache.write('lists', r.data);
+        // Replace the copy in memory only when no new list or item is still being saved.
+        const busySaving = listsData && (listsData.lists.some((l) => isUnsaved(l.list_id)) || listsData.items.some((i) => isUnsaved(i.item_id)));
+        if (!busySaving) listsData = r.data;
+      }
+    }
+    if (old('more') && !prefetching.has('more')) {
+      prefetching.add('more');
+      const r = await call('app.more', {});
+      if (r.ok) cache.write('more', r.data);
+    }
+  } catch (e) {
+    // Only a head start: each screen loads normally when opened.
+  } finally {
+    prefetching.delete('lists');
+    prefetching.delete('more');
+  }
+}
+
 /** Guards against an older request finishing after a newer one. */
 let showing = 0;
 /** A saved screen younger than this is shown without asking the server again. */
@@ -307,7 +338,7 @@ async function show(force = false, fresh = false) {
   $('filters').hidden = s.screen === 'more' || s.screen === 'review' || s.screen === 'lists';
   if (s.screen === 'more' || s.screen === 'review' || s.screen === 'lists') {
     $('print-button').hidden = true;
-    await (s.screen === 'more' ? showMore(mine, force, fresh) : s.screen === 'lists' ? showLists(mine, s) : showReview(mine));
+    await (s.screen === 'more' ? showMore(mine, force, fresh) : s.screen === 'lists' ? showLists(mine, force, fresh) : showReview(mine));
     return;
   }
 
@@ -323,6 +354,8 @@ async function show(force = false, fresh = false) {
     showPending(saved.data.pending);
     if (!force && Date.now() - saved.at < FRESH_MS) {
       $('main').replaceChildren(savedView, refreshLink(`Updated ${clock(saved.at)}`));
+      // Still check the neighbours and the other tabs: anything already held is skipped.
+      prefetchAround(s.date).then(prefetchScreens);
       return;
     }
     $('main').replaceChildren(savedView, status);
@@ -343,7 +376,7 @@ async function show(force = false, fresh = false) {
     const server = lastTiming.server_ms === null ? '' : ` · server ${(lastTiming.server_ms / 1000).toFixed(1)} s`;
     $('main').replaceChildren(draw(s, shown ? shown.data : r.data),
       refreshLink(`Updated ${clock(Date.now())} · ${(lastTiming.total_ms / 1000).toFixed(1)} s${server}`));
-    prefetchAround(s.date);
+    prefetchAround(s.date).then(prefetchScreens);
   } catch (e) {
     if (mine !== showing) return;
     if (e instanceof AppOutOfDate && reloadForUpdate()) return;
@@ -389,10 +422,13 @@ let listsData = null;
  * Lists: the overview, or one list (saved copy first). Ticks and new items update the saved copy
  * directly, so the screen stays instant; everything else reloads from the server.
  * @param {number} mine
- * @param {State} s
+ * @param {boolean} [force]  ask the server even if the saved copy is fresh
+ * @param {boolean} [fresh]  and have the server rebuild its answer
  */
-async function showLists(mine, s) {
-  const saved = listsData ? { at: Date.now(), data: listsData } : cache.read('lists');
+async function showLists(mine, force = false, fresh = false) {
+  // The copy in memory holds any saves still running; the stored copy says how old it is.
+  const stored = cache.read('lists');
+  const saved = listsData ? { at: stored?.at ?? 0, data: listsData } : stored;
   listsData = saved?.data ?? { lists: [], items: [], events: [] };
   /** @type {import('./views/lists.js').ListsScreen} */
   const screen = {
@@ -414,8 +450,10 @@ async function showLists(mine, s) {
   const savedView = saved ? drawSaved(drawIt) : null;
   if (savedView) $('main').replaceChildren(savedView);
   else $('main').replaceChildren(el('p', { class: 'muted' }, 'Loading…'));
+  // Just loaded (e.g. in the background after the calendar): nothing to ask (RT, 2026-09-25).
+  if (saved && savedView && !force && Date.now() - saved.at < FRESH_MS) return;
   try {
-    const r = await call('lists.all');
+    const r = await call('lists.all', fresh ? { fresh: true } : {});
     if (mine !== showing) return;
     if (!r.ok) throw new Error(r.errors.map((e) => e.message).join('; '));
     // Lists and items still being saved are kept: the server does not know them yet.
