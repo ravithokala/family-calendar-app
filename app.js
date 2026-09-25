@@ -264,7 +264,11 @@ async function show(force = false) {
   document.querySelectorAll('#tabs button').forEach((b) => b.setAttribute('aria-current', String(b.getAttribute('data-screen') === s.screen)));
   document.querySelectorAll('#filters button').forEach((b) => b.setAttribute('aria-pressed', String(b.getAttribute('data-view') === s.view)));
   $('title').textContent = f.title;
-  $('today-button').hidden = s.screen === 'today';
+  // "This month" / "This week" only once you have moved away; the Today tab is the bottom bar's (RT, 2026-09-25).
+  const t = today();
+  const showsToday = s.screen === 'month' ? s.date.slice(0, 7) === t.slice(0, 7) : f.from <= t && t <= f.to;
+  $('today-button').hidden = s.screen === 'today' || showsToday;
+  $('today-button').textContent = s.screen === 'month' ? 'This month' : s.screen === 'week' ? 'This week' : 'Today';
   $('print-button').hidden = s.screen !== 'month';
   $('print-button').onclick = () => printSheet(formContext(), today(), s.date.slice(0, 7));
   $('prev').hidden = f.prev === null;
@@ -451,11 +455,9 @@ function showSignedIn() {
     onclick: () => go({ screen, date: screen === 'today' ? today() : readState().date }),
   }, screen[0].toUpperCase() + screen.slice(1))));
   $('today-button').onclick = () => {
-    // Always visible: move to today, or if already there, show it again; then point at it (RT, 2026-09-25).
+    // Back to the current month, week or day, pointing at today on arrival.
     pointToToday = true;
-    const before = location.hash;
     go({ date: today() });
-    if (location.hash === before) show();
   };
   // Tapping the title shows the app's version (RT, 2026-09-25). Last, and guarded: an old page
   // without the title's id must not stop the buttons above from working.
