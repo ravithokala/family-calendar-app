@@ -1,0 +1,79 @@
+// @ts-check
+
+import { call } from '../api.js';
+import * as cache from '../cache.js';
+import { el } from '../dom.js';
+import { listsOverview, listDetail, isUnsaved } from '../views/lists.js';
+import { toast } from '../views/sheet.js';
+import { formContext } from './context.js';
+import { $, app, go, readState, today, FRESH_MS, isCurrent, drawSaved, showError } from './state.js';
+
+/**
+ * The copy of the lists in memory: one for every visit to Lists, so saves still running from an
+ * earlier visit (a new list, new items) land in what is on screen now.
+ * @type {import('../views/lists.js').ListsData | null}
+ */
+let listsData = null;
+
+/** Whether a new list or item is still being saved. */
+const busySaving = () => Boolean(listsData && (listsData.lists.some((l) => isUnsaved(l.list_id)) || listsData.items.some((i) => isUnsaved(i.item_id))));
+
+/**
+ * Takes lists fetched in the background (after the calendar), unless something is still being saved.
+ * @param {import('../views/lists.js').ListsData} data
+ */
+export function acceptBackgroundLists(data) {
+  cache.write('lists', data);
+  if (!busySaving()) listsData = data;
+}
+
+/**
+ * Lists: the overview, or one list (saved copy first). Ticks and new items update the saved copy
+ * directly, so the screen stays instant; everything else reloads from the server.
+ * @param {number} mine
+ * @param {boolean} [force]  ask the server even if the saved copy is fresh
+ * @param {boolean} [fresh]  and have the server rebuild its answer
+ */
+export async function showLists(mine, force = false, fresh = false) {
+  // The copy in memory holds any saves still running; the stored copy says how old it is.
+  const stored = cache.read('lists');
+  const saved = listsData ? { at: stored?.at ?? 0, data: listsData } : stored;
+  listsData = saved?.data ?? { lists: [], items: [], events: [] };
+  /** @type {import('../views/lists.js').ListsScreen} */
+  const screen = {
+    ctx: formContext(),
+    get data() { return /** @type {import('../views/lists.js').ListsData} */ (listsData); },
+    set data(v) { listsData = v; },
+    open: (listId) => go({ screen: 'lists', list: listId }),
+    redraw: () => { if (readState().screen === 'lists') $('main').replaceChildren(drawIt()); },
+    // A list change can change what the calendar shows under "To do": saved months stay, but refresh.
+    persist: () => { cache.write('lists', screen.data); cache.staleCalendar(); },
+    reload: () => { if (isCurrent(mine)) app.show(true); },
+    // A new list got its real id: point the address at it without drawing again.
+    renamed: (from, to) => { if (location.hash.endsWith(`/${from}`)) history.replaceState(null, '', location.hash.replace(`/${from}`, `/${to}`)); },
+  };
+  // The address, not the state when drawing began: a new list's id changes once it is saved.
+  const drawIt = () => { const list = readState().list; return list ? listDetail(screen, list, today()) : listsOverview(screen); };
+  const savedView = saved ? drawSaved(drawIt) : null;
+  if (savedView) $('main').replaceChildren(savedView);
+  else $('main').replaceChildren(el('p', { class: 'muted' }, 'Loading…'));
+  // Just loaded (e.g. in the background after the calendar): nothing to ask (RT, 2026-09-25).
+  if (saved && savedView && !force && Date.now() - saved.at < FRESH_MS) return;
+  try {
+    const r = await call('lists.all', fresh ? { fresh: true } : {});
+    if (!isCurrent(mine)) return;
+    if (!r.ok) throw new Error(r.errors.map((e) => e.message).join('; '));
+    // Lists and items still being saved are kept: the server does not know them yet.
+    screen.data = { ...r.data,
+      lists: [...r.data.lists, ...screen.data.lists.filter((l) => isUnsaved(l.list_id))],
+      items: [...r.data.items, ...screen.data.items.filter((i) => isUnsaved(i.item_id))] };
+    cache.write('lists', r.data);
+    // Keep what is being typed: only redraw if the quick-add box is empty.
+    const typing = /** @type {HTMLInputElement|null} */ (document.querySelector('.add-input'))?.value;
+    if (!typing) $('main').replaceChildren(drawIt());
+  } catch (e) {
+    if (!isCurrent(mine)) return;
+    if (!savedView) showError(`Could not load: ${e instanceof Error ? e.message : String(e)}`);
+    else toast(`Could not refresh: ${e instanceof Error ? e.message : String(e)}`);
+  }
+}
