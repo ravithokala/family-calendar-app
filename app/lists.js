@@ -6,7 +6,7 @@ import { el } from '../dom.js';
 import { listsOverview, listDetail, isUnsaved, hasPendingSaves } from '../views/lists.js';
 import { toast } from '../views/sheet.js';
 import { formContext } from './context.js';
-import { $, app, go, readState, today, FRESH_MS, isCurrent, drawSaved, showError } from './state.js';
+import { $, app, go, readState, today, isCurrent, drawSaved, showError } from './state.js';
 
 /**
  * The copy of the lists in memory: one for every visit to Lists, so saves still running from an
@@ -95,8 +95,8 @@ export async function showLists(mine, force = false, fresh = false) {
   if (savedView) $('main').replaceChildren(savedView);
   else $('main').replaceChildren(el('p', { class: 'muted' }, 'Loading…'));
   pollWhileOpen(mine, drawIt);
-  // Just loaded (e.g. in the background after the calendar): nothing to ask (RT, 2026-09-25).
-  if (saved && savedView && !force && Date.now() - saved.at < FRESH_MS) return;
+  // Always ask: lists are shared and change often, so even a minute-old copy may miss the other
+  // phone's changes (RT, 2026-09-25). The saved copy is on screen meanwhile.
   try {
     const r = await call('lists.all', fresh ? { fresh: true } : {});
     if (!isCurrent(mine)) return;

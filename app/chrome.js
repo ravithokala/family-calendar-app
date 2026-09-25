@@ -21,6 +21,20 @@ import { $, app, TABS, go, readState, frame, today, FRESH_MS, shownAgo } from '.
 /** A screen older than this is refreshed when the app comes back to the front. */
 const RESUME_MS = 30 * 1000;
 
+/**
+ * Whether a newer version of the app has been published since this one started: an app left open
+ * keeps its old code until reloaded (RT, 2026-09-25). Reloading keeps the screen: it is in the address.
+ */
+async function newerVersionPublished() {
+  try {
+    const text = await (await fetch('./version.js', { cache: 'no-store' })).text();
+    const published = text.match(/VERSION = '([^']*)'/)?.[1];
+    return Boolean(published && published !== VERSION);
+  } catch (e) {
+    return false; // offline: carry on with this version
+  }
+}
+
 /** A swipe must travel this far sideways, and mostly sideways, to turn the page. */
 const SWIPE_PX = 60;
 
@@ -131,7 +145,9 @@ export function showSignedIn() {
   window.addEventListener('hashchange', () => app.show());
   // A phone keeps the app open in the background for hours: coming back redraws from the saved copy
   // and fetches the latest, instead of showing what was there (RT, 2026-09-25: a list G changed).
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && shownAgo() > RESUME_MS) app.show();
+  document.addEventListener('visibilitychange', async () => {
+    if (document.visibilityState !== 'visible' || shownAgo() <= RESUME_MS) return;
+    if (await newerVersionPublished()) { location.reload(); return; }
+    app.show();
   });
 }
