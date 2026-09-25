@@ -15,6 +15,7 @@ import { captureBox } from './views/capture.js';
 import { listsOverview, listDetail, isUnsaved } from './views/lists.js';
 import { openSheet, toast } from './views/sheet.js';
 import { busy } from './views/fields.js';
+import { VERSION } from './version.js';
 
 /**
  * The family app (ADR-078, ADR-080). It holds no calendar rules and no family data: everything
@@ -103,7 +104,21 @@ const clock = (at) => new Date(at).toLocaleTimeString('en-GB', { hour: '2-digit'
  * The "Updated …" line; tapping it refreshes now.
  * @param {string} text
  */
-const refreshLink = (text) => el('p', { class: 'status muted', onclick: () => show(true) }, `${text} · tap to refresh`);
+const refreshLink = (text) => el('p', { class: 'status muted', onclick: () => show(true) }, `${text} · tap to refresh`,
+  // The app's version where it is seen every day, not only at the bottom of More (RT, 2026-09-25).
+  el('br'), `Version ${VERSION}`);
+
+/** The version this phone last ran, to say once when an update has arrived. */
+const SEEN_VERSION_KEY = 'fc.version';
+
+/** Says "App updated to …" the first time a new version runs; a first install says nothing. */
+function announceUpdate() {
+  try {
+    const seen = localStorage.getItem(SEEN_VERSION_KEY);
+    if (seen !== VERSION) localStorage.setItem(SEEN_VERSION_KEY, VERSION);
+    if (seen !== null && seen !== VERSION) toast(`App updated to ${VERSION}.`);
+  } catch (e) { /* storage unavailable: nothing to compare with */ }
+}
 
 /** @param {string} message */
 function showError(message) {
@@ -462,6 +477,7 @@ async function start() {
     return;
   }
   showSignedIn();
+  announceUpdate();
   await show();
 }
 
