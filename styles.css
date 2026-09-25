@@ -181,3 +181,7 @@ textarea.prompt { font: 12px/1.35 ui-monospace, Menlo, Consolas, monospace; back
 .done-items summary { margin: 14px 0 4px; cursor: pointer; }
 .list-actions { margin-top: 18px; justify-content: space-between; }
 .todos h2 { font-size: 15px; margin: 16px 0 4px; color: var(--muted); font-weight: 600; }
+/* Routine sheet (ADR-086) */
+.actions.stacked { flex-direction: column; gap: 0; }
+.actions.stacked .wide-button { flex: none; }
+.msg ul { margin: 6px 0 0; padding-left: 18px; }

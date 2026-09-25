@@ -9,12 +9,11 @@ import { VERSION } from '../version.js';
 import { sourceSheet, recentSources } from './sources.js';
 import { printSheet } from './print.js';
 import { schoolsSection } from './schools.js';
-import { openSheet } from './sheet.js';
-import { field, select, saveButton } from './fields.js';
+import { routineDetail, runningSchedules, scheduleText, endedOn } from './routines.js';
 
 /**
  * The More screen: review and sources, printing, reminders (add, edit, done, cancel, reopen) and
- * routines (list, add).
+ * routines (list, add, change, end).
  * @param {import('./forms.js').FormContext} ctx
  * @param {{ reminders: import('./forms.js').Reminder[], activities: any[], schedules: any[],
  *   sources: import('./sources.js').SourceSummary[], pending: number, periods: import('./schools.js').Period[] }} data
@@ -45,25 +44,18 @@ export function moreView(ctx, data, nav) {
         : el('div', { class: 'row-actions' }, el('span', { class: 'muted' }, r.status.toLowerCase()),
           el('button', { class: 'link', type: 'button', onclick: setStatus(r, 'ACTIVE', `Reopened "${r.title}".`) }, 'Reopen'))));
 
-  /**
-   * A routine's drawn icon, as on the printed calendar (ADR-068).
-   * @param {any} a
-   */
-  const iconSheet = (a) => {
-    const icon = select(a.icon ?? '', [['', '(from its kind)'], ...ctx.meta.icons.map((i) => /** @type {[string, string]} */ ([i, i]))]);
-    const sheet = openSheet(`${a.person} - ${a.name}`, el('div', { class: 'form' }, field('Icon', icon.node),
-      el('div', { class: 'actions' }, saveButton('Save icon', async () => {
-        const r = await ctx.call('routines.setIcon', { activity_id: a.activity_id, icon: icon.get() });
-        if (!r.ok) { showIssues(sheet.messages, r); return; }
-        sheet.close();
-        ctx.saved(`Icon saved for ${a.person} ${a.name}.`, r);
-      }))));
-  };
-  const scheduleText = (/** @type {any} */ s) => (s.schedule_type === 'EXPLICIT_DATES'
-    ? `published dates to ${niceDate(s.valid_to)}`
-    : `${s.day_of_week.map((/** @type {string} */ d) => d.slice(0, 3).toLowerCase()).join(', ')}${s.valid_to ? ` until ${niceDate(s.valid_to)}` : ''}`);
   const routines = [...data.activities].filter((a) => a.active !== false)
     .sort((a, b) => `${a.person}${a.name}`.localeCompare(`${b.person}${b.name}`));
+  const current = routines.filter((a) => runningSchedules(a, data.schedules, nav.today).length > 0);
+  const ended = routines.filter((a) => runningSchedules(a, data.schedules, nav.today).length === 0);
+  /** @param {any} a @param {boolean} isEnded */
+  const routineRow = (a, isEnded) => el('li', { class: 'item tappable', onclick: () => routineDetail(ctx, a, data.schedules, nav.today) },
+    el('div', { class: 'body' },
+      el('div', {}, `${a.person} - ${a.name}`),
+      el('div', { class: 'details' }, [
+        ...(isEnded ? [endedOn(a, data.schedules)] : runningSchedules(a, data.schedules, nav.today).map((s) => scheduleText(a, s, nav.today))),
+        a.term_time_only ? 'term time' : '',
+      ].filter(Boolean).join(' · '))));
 
   return el('div', {},
     messages,
@@ -84,15 +76,9 @@ export function moreView(ctx, data, nav) {
     el('section', {},
       el('div', { class: 'section-head' }, el('h2', {}, 'Routines'),
         el('button', { class: 'link', type: 'button', onclick: () => routineSheet(ctx) }, '+ Add')),
-      el('ul', { class: 'items' }, routines.map((a) => el('li', { class: 'item tappable', onclick: () => iconSheet(a) },
-        el('span', { class: 'time' }, a.default_start_time ? `${a.default_start_time}${a.default_end_time ? `–${a.default_end_time}` : ''}` : ''),
-        el('div', { class: 'body' },
-          el('div', {}, `${a.person} - ${a.name}`),
-          el('div', { class: 'details' }, [
-            ...data.schedules.filter((s) => s.activity_id === a.activity_id && s.status === 'ACTIVE').map(scheduleText),
-            a.term_time_only ? 'term time' : '',
-          ].filter(Boolean).join(' · ')))))),
-      el('p', { class: 'muted small' }, 'Tap a routine to change its icon. Changing or ending a routine is not available yet.')),
+      el('ul', { class: 'items' }, current.map((a) => routineRow(a, false))),
+      ended.length ? el('details', {}, el('summary', { class: 'muted' }, `Ended (${ended.length})`), el('ul', { class: 'items' }, ended.map((a) => routineRow(a, true)))) : '',
+      el('p', { class: 'muted small' }, 'Tap a routine to change it from a date, end it, or change its icon.')),
     schoolsSection(ctx, data.periods, nav.today),
     el('p', { class: 'muted small version' }, `Family Cal · version ${VERSION}`));
 }
