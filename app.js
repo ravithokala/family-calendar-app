@@ -104,7 +104,8 @@ const clock = (at) => new Date(at).toLocaleTimeString('en-GB', { hour: '2-digit'
  * The "Updated …" line; tapping it refreshes now.
  * @param {string} text
  */
-const refreshLink = (text) => el('p', { class: 'status muted', onclick: () => show(true) }, `${text} · tap to refresh`);
+// Tapping asks the server to rebuild too, not to use its saved answer (ADR-088).
+const refreshLink = (text) => el('p', { class: 'status muted', onclick: () => show(true, true) }, `${text} · tap to refresh`);
 
 /** The version this phone last ran, to say once when an update has arrived. */
 const SEEN_VERSION_KEY = 'fc.version';
@@ -236,13 +237,53 @@ function drawSaved(drawIt) {
   }
 }
 
+/**
+ * Days with nothing on yet, for the empty month shown while loading.
+ * @param {string} from
+ * @param {string} to
+ */
+function emptyDays(from, to) {
+  const days = [];
+  for (let d = from; d <= to; d = addDays(d, 1)) days.push({ date: d, items: [], school: [] });
+  return days;
+}
+
+/** Months being fetched in the background, so each is asked for once at a time. */
+const prefetching = new Set();
+
+/**
+ * Loads the months either side in the background, one after the other, so ‹ and › draw at once
+ * (RT, 2026-09-25). Months this phone already holds are left to refresh when shown.
+ * @param {string} date  the screen's date
+ */
+async function prefetchAround(date) {
+  const month = `${date.slice(0, 7)}-01`;
+  for (const next of [addMonths(month, 1), addMonths(month, -1)]) {
+    const range = monthRange(next);
+    const key = `days:${range.from}:${range.to}`;
+    if (prefetching.has(key) || cache.covering(range.from, range.to)) continue;
+    prefetching.add(key);
+    try {
+      const r = await call('app.days', range);
+      if (r.ok) cache.write(key, r.data);
+    } catch (e) {
+      // Only a head start: the month loads normally when shown.
+    } finally {
+      prefetching.delete(key);
+    }
+  }
+}
+
 /** Guards against an older request finishing after a newer one. */
 let showing = 0;
 /** A saved screen younger than this is shown without asking the server again. */
 const FRESH_MS = 60 * 1000;
 
-/** @param {boolean} [force]  ask the server even if the saved screen is fresh */
-async function show(force = false) {
+/**
+ * @param {boolean} [force]  ask the server even if the saved screen is fresh
+ * @param {boolean} [fresh]  and have the server rebuild its answer (ADR-088)
+ */
+async function show(force = false, fresh = false) {
   const s = readState();
   const f = frame(s);
   const mine = ++showing;
@@ -278,10 +319,13 @@ async function show(force = false) {
     }
     $('main').replaceChildren(savedView, status);
   } else {
-    $('main').replaceChildren(el('p', { class: 'muted' }, 'Loading… (the first load of the day can take a few seconds)'));
+    // An empty month while it loads, rather than a blank page (RT, 2026-09-25).
+    const skeleton = s.screen === 'month' ? drawSaved(() => monthView(/** @type {any} */ (theme), /** @type {any} */ ({ days: emptyDays(f.from, f.to) }), `${s.date.slice(0, 7)}-01`, today(), () => {}, s.view)) : null;
+    if (skeleton) skeleton.classList.add('loading');
+    $('main').replaceChildren(...(skeleton ? [skeleton, el('p', { class: 'status muted' }, 'Loading…')] : [el('p', { class: 'muted' }, 'Loading…')]));
   }
   try {
-    const r = await call('app.days', fetchRange);
+    const r = await call('app.days', fresh ? { ...fetchRange, fresh: true } : fetchRange);
     if (mine !== showing) return;
     if (!r.ok) throw new Error(r.errors.map((e) => e.message).join('; '));
     cache.write(key, r.data);
@@ -291,6 +335,7 @@ async function show(force = false) {
     const server = lastTiming.server_ms === null ? '' : ` · server ${(lastTiming.server_ms / 1000).toFixed(1)} s`;
     $('main').replaceChildren(draw(s, shown ? shown.data : r.data),
       refreshLink(`Updated ${clock(Date.now())} · ${(lastTiming.total_ms / 1000).toFixed(1)} s${server}`));
+    prefetchAround(s.date);
   } catch (e) {
     if (mine !== showing) return;
     if (e instanceof AppOutOfDate && reloadForUpdate()) return;
