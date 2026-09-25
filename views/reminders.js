@@ -52,6 +52,6 @@ export function monthReminders(ctx, reminders, monthStart, today) {
     el('div', { class: 'section-head' }, el('h2', {}, 'Reminders'),
       el('button', { class: 'link', type: 'button', onclick: () => reminderSheet(ctx, undefined, { from, until: monthEnd }) }, '+ Add')),
     shown.length === 0 ? el('p', { class: 'muted small' }, 'No reminders this month.')
-      : el('ul', { class: 'items' }, shown.map((r) => el('li', { class: 'item tappable', onclick: () => reminderActions(ctx, r, today) },
+      : el('ul', { class: 'items' }, shown.map((r) => el('li', { class: 'item plain tappable', onclick: () => reminderActions(ctx, r, today) },
         el('div', { class: `body${r.window_end < today ? ' overdue-text' : ''}` }, `${r.owner.join('+')} - ${r.title}`)))));
 }

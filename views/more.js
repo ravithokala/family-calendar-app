@@ -51,7 +51,7 @@ export function moreView(ctx, data, nav) {
   const current = routines.filter((a) => runningSchedules(a, data.schedules, nav.today).length > 0);
   const ended = routines.filter((a) => runningSchedules(a, data.schedules, nav.today).length === 0);
   /** @param {any} a @param {boolean} isEnded */
-  const routineRow = (a, isEnded) => el('li', { class: 'item tappable', onclick: () => routineDetail(ctx, a, data.schedules, nav.today, data.undoable?.[a.activity_id]) },
+  const routineRow = (a, isEnded) => el('li', { class: 'item plain tappable', onclick: () => routineDetail(ctx, a, data.schedules, nav.today, data.undoable?.[a.activity_id]) },
     el('div', { class: 'body' },
       el('div', {}, `${a.person} - ${a.name}`),
       el('div', { class: 'details' }, [

@@ -25,7 +25,7 @@ export function removedSection(ctx, removed) {
    * @param {() => Promise<import('../api.js').ApiResponse>} restore
    * @param {string} done
    */
-  const row = (label, detail, restore, done) => el('li', { class: 'item' },
+  const row = (label, detail, restore, done) => el('li', { class: 'item with-action' },
     el('div', { class: 'body' }, el('div', {}, label), el('div', { class: 'details' }, detail)),
     el('button', { class: 'link', type: 'button', onclick: async (/** @type {Event} */ ev) => {
       const r = await busy(/** @type {HTMLButtonElement} */ (ev.currentTarget), restore);

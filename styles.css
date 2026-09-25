@@ -60,6 +60,9 @@ main { padding: 8px 12px calc(76px + env(safe-area-inset-bottom)); max-width: 82
 .items { list-style: none; margin: 0; padding: 0; }
 .item { display: grid; grid-template-columns: 92px 1fr; gap: 10px; align-items: baseline; padding: 8px 0; border-bottom: 1px solid var(--line); }
 .item .time { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 14px; }
+/* Rows without a time use the full width (RT, 2026-09-25: text was squeezed into the time column). */
+.item.plain { grid-template-columns: 1fr; }
+.item.with-action { grid-template-columns: 1fr auto; align-items: center; }
 .pill { display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; border-radius: 6px; font-weight: 600; overflow-wrap: anywhere; }
 .pill .icon { width: 15px; height: 15px; flex: none; }
 .details { font-size: 13px; color: var(--muted); margin-top: 3px; }
