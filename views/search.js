@@ -89,3 +89,45 @@ export function searchSheet(ctx, index, nav) {
     update(next) { current = next; draw(); },
   };
 }
+
+/**
+ * The items of the lists matching the query (ADR-094): of one list, or of every active list.
+ * Removed items are not in the data; done ones are included.
+ * @param {import('./lists.js').ListsData} data
+ * @param {string} query
+ * @param {string|null} listId  one list, or null for all
+ */
+export function searchItems(data, query, listId) {
+  if (!query.trim()) return [];
+  const lists = new Map(data.lists.filter((l) => l.status === 'ACTIVE' || l.list_id === listId).map((l) => [l.list_id, l]));
+  return data.items
+    .filter((i) => (listId ? i.list_id === listId : lists.has(i.list_id)) && matches(query, [i.text, i.notes, ...i.owner]))
+    // Open ones first.
+    .sort((a, b) => Number(a.status === 'DONE') - Number(b.status === 'DONE'))
+    .map((i) => ({ item: i, list: lists.get(i.list_id) }));
+}
+
+/**
+ * Search on the Lists tab: the items of every list, or inside a list only its own (RT, 2026-09-25).
+ * @param {import('./lists.js').ListsData} data
+ * @param {string|null} listId
+ * @param {(listId: string) => void} openList
+ */
+export function listSearchSheet(data, listId, openList) {
+  const list = listId ? data.lists.find((l) => l.list_id === listId) : undefined;
+  const box = /** @type {HTMLInputElement} */ (el('input', { type: 'search', class: 'search-input', placeholder: list ? `Search ${list.title}` : 'Search the items in every list', enterkeyhint: 'search', autocomplete: 'off' }));
+  const results = el('div', { class: 'search-results' });
+  const draw = () => {
+    if (!box.value.trim()) { results.replaceChildren(el('p', { class: 'muted small' }, list ? `Items on ${list.title}.` : 'Items on all your lists.')); return; }
+    const found = searchItems(data, box.value, listId);
+    results.replaceChildren(found.length === 0 ? el('p', { class: 'muted' }, 'No items found.')
+      : el('ul', { class: 'items' }, found.map(({ item, list: l }) => el('li', { class: 'item plain tappable', onclick: () => { sheet.close(); openList(item.list_id); } },
+        el('div', { class: `body${item.status === 'DONE' ? ' muted' : ''}` },
+          el('div', {}, item.text),
+          el('div', { class: 'details' }, [listId ? '' : l?.title ?? '', item.status === 'DONE' ? 'done' : '', item.owner.join('+'), item.notes ?? ''].filter(Boolean).join(' · ')))))));
+  };
+  box.addEventListener('input', draw);
+  const sheet = openSheet(list ? `Search ${list.title}` : 'Search lists', el('div', { class: 'form' }, box, results));
+  draw();
+  setTimeout(() => box.focus(), 50);
+}

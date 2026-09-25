@@ -2,7 +2,8 @@
 
 import { user, signOutOfGoogle } from '../auth.js';
 import { call, signOut } from '../api.js';
-import { searchSheet } from '../views/search.js';
+import { searchSheet, listSearchSheet } from '../views/search.js';
+import { currentLists } from './lists.js';
 import * as cache from '../cache.js';
 import { el, addDays } from '../dom.js';
 import { eventSheet, routineSheet, reminderSheet } from '../views/forms.js';
@@ -71,6 +72,14 @@ export function announceUpdate() {
  * old (ADR-094).
  */
 async function openSearch() {
+  // On the Lists tab, search the lists' items: all of them, or inside a list only its own.
+  const s = readState();
+  if (s.screen === 'lists') {
+    const lists = currentLists();
+    if (!lists) { toast('Lists are still loading.'); return; }
+    listSearchSheet(lists, s.list, (listId) => go({ screen: 'lists', list: listId }));
+    return;
+  }
   const saved = cache.read('search');
   const sheet = searchSheet(formContext(), saved?.data ?? null, { today: today(), openDay: (date) => go({ screen: 'day', date }) });
   if (saved && Date.now() - saved.at < FRESH_MS) return;

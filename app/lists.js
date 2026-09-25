@@ -15,6 +15,9 @@ import { $, app, go, readState, today, FRESH_MS, isCurrent, drawSaved, showError
  */
 let listsData = null;
 
+/** The lists as this phone holds them now, for searching their items. */
+export const currentLists = () => listsData ?? cache.read('lists')?.data ?? null;
+
 /** Whether a new list or item is still being saved. */
 const busySaving = () => Boolean(listsData && (listsData.lists.some((l) => isUnsaved(l.list_id)) || listsData.items.some((i) => isUnsaved(i.item_id))));
 
