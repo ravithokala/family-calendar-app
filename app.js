@@ -76,7 +76,10 @@ const formContext = () => ({
   saved: (message, r, undo) => {
     // Saved months stay on screen while they refresh, instead of a first-time "Loading…" (RT, 2026-09-25).
     cache.staleCalendar();
-    ['more', 'review', 'lists'].forEach(cache.forget);
+    // More and Review keep their saved copy too, marked out of date (RT, 2026-09-25).
+    cache.stale('more');
+    cache.stale('review');
+    cache.forget('lists');
     listsData = null;
     toast(message, r.warnings, undo && (() => undoSaved(undo)));
     show(true);
@@ -304,7 +307,7 @@ async function show(force = false, fresh = false) {
   $('filters').hidden = s.screen === 'more' || s.screen === 'review' || s.screen === 'lists';
   if (s.screen === 'more' || s.screen === 'review' || s.screen === 'lists') {
     $('print-button').hidden = true;
-    await (s.screen === 'more' ? showMore(mine) : s.screen === 'lists' ? showLists(mine, s) : showReview(mine));
+    await (s.screen === 'more' ? showMore(mine, force, fresh) : s.screen === 'lists' ? showLists(mine, s) : showReview(mine));
     return;
   }
 
@@ -354,23 +357,23 @@ async function show(force = false, fresh = false) {
  * The More screen, from its own two lists (saved copy first, as with the calendar).
  * @param {number} mine
  */
-async function showMore(mine) {
+async function showMore(mine, force = false, fresh = false) {
   const saved = cache.read('more');
   const draw = (/** @type {any} */ data) => moreView(formContext(), data, { openReview: () => go({ screen: 'review' }), today: today() });
   const savedView = saved ? drawSaved(() => draw(saved.data)) : null;
+  if (saved && savedView && !force && Date.now() - saved.at < FRESH_MS) {
+    $('main').replaceChildren(savedView, refreshLink(`Updated ${clock(saved.at)}`));
+    return;
+  }
   if (savedView) $('main').replaceChildren(savedView, el('p', { class: 'status muted' }, 'Updating…'));
   else $('main').replaceChildren(el('p', { class: 'muted' }, 'Loading…'));
   try {
-    const [routines, sources, count, schools, removed] = await Promise.all([
-      call('routines.list'), call('sources.list'), call('review.count'), call('schools.list'), call('app.removed')]);
+    // One request for the whole screen (RT, 2026-09-25: five made it slow).
+    const r = await call('app.more', fresh ? { fresh: true } : {});
     if (mine !== showing) return;
-    if (!routines.ok || !sources.ok || !schools.ok || !removed.ok) {
-      throw new Error([...routines.errors, ...sources.errors, ...schools.errors, ...removed.errors].map((e) => e.message).join('; '));
-    }
-    const pending = count.ok ? count.data.count : Number($('pending').dataset.count ?? 0);
-    showPending(pending);
-    const data = { activities: routines.data.activities, schedules: routines.data.schedules,
-      undoable: routines.data.undoable, sources: sources.data.sources, pending, periods: schools.data.periods, removed: removed.data };
+    if (!r.ok) throw new Error(r.errors.map((e) => e.message).join('; '));
+    const data = r.data;
+    showPending(data.pending);
     cache.write('more', data);
     $('main').replaceChildren(draw(data), refreshLink(`Updated ${clock(Date.now())}`));
   } catch (e) {

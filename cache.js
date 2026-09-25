@@ -102,6 +102,17 @@ export function staleCalendar() {
   } catch (e) { /* ignore */ }
 }
 
+/**
+ * Marks one saved screen out of date without dropping it: it still draws at once, then refreshes.
+ * @param {string} key
+ */
+export function stale(key) {
+  try {
+    const entry = JSON.parse(localStorage.getItem(PREFIX + key) ?? 'null');
+    if (entry) localStorage.setItem(PREFIX + key, JSON.stringify({ ...entry, at: 0 }));
+  } catch (e) { /* ignore */ }
+}
+
 /** Forgets one saved screen. @param {string} key */
 export function forget(key) {
   try { localStorage.removeItem(PREFIX + key); } catch (e) { /* ignore */ }
