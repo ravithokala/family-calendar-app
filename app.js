@@ -13,6 +13,7 @@ import { reviewView } from './views/review.js';
 import { printSheet } from './views/print.js';
 import { captureBox } from './views/capture.js';
 import { listsOverview, listDetail, isUnsaved } from './views/lists.js';
+import { monthReminders } from './views/reminders.js';
 import { openSheet, toast } from './views/sheet.js';
 import { busy } from './views/fields.js';
 import { VERSION } from './version.js';
@@ -186,7 +187,11 @@ function draw(s, all) {
       show(true);
     },
   };
-  if (s.screen === 'month') return monthView(t, data, `${s.date.slice(0, 7)}-01`, today(), openDay, s.view);
+  if (s.screen === 'month') {
+    const monthStart = `${s.date.slice(0, 7)}-01`;
+    // The month's reminders under the grid, as on the printed page (ADR-089).
+    return el('div', {}, monthView(t, data, monthStart, today(), openDay, s.view), monthReminders(ctx, data.reminders, monthStart, today()));
+  }
   if (s.screen === 'week') {
     return el('div', {}, data.days.map((d) => [el('div', { 'data-date': d.date }, daySection(t, niceDate(d.date), d, { onTitle: () => openDay(d.date), onItem: onItem(d.date) })),
       todoSection(data.todos.filter((x) => x.due_date === d.date), todoActions)]));

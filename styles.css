@@ -198,3 +198,6 @@ textarea.prompt { font: 12px/1.35 ui-monospace, Menlo, Consolas, monospace; back
 #app-title { cursor: pointer; }
 /* The empty month shown while it loads (ADR-088). */
 .month.loading .grid { opacity: 0.55; }
+/* Reminders under the Month grid (ADR-089). */
+.month-reminders { margin-top: 14px; }
+.overdue-text { color: var(--bad); }

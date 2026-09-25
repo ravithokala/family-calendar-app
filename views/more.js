@@ -73,7 +73,10 @@ export function moreView(ctx, data, nav) {
     el('section', {},
       el('div', { class: 'section-head' }, el('h2', {}, 'Reminders'),
         el('button', { class: 'link', type: 'button', onclick: () => reminderSheet(ctx) }, '+ Add')),
-      active.length ? el('ul', { class: 'items' }, active.map(reminderRow)) : el('p', { class: 'muted' }, 'No reminders.'),
+      // Active reminders live under each month on the Month tab (ADR-089); here, adding and history.
+      el('p', { class: 'muted small' }, active.length
+        ? `${active.length} active: they show under each month on the Month tab.`
+        : 'Active reminders show under each month on the Month tab.'),
       closed.length ? el('details', {}, el('summary', { class: 'muted' }, `Done or cancelled (${closed.length})`), el('ul', { class: 'items' }, closed.map(reminderRow))) : ''),
     el('section', {},
       el('div', { class: 'section-head' }, el('h2', {}, 'Routines'),
