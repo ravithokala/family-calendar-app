@@ -195,3 +195,4 @@ textarea.prompt { font: 12px/1.35 ui-monospace, Menlo, Consolas, monospace; back
 .section-summary { cursor: pointer; list-style: none; }
 .section-summary h2 { display: inline; }
 .section-summary::-webkit-details-marker { display: none; }
+#app-title { cursor: pointer; }

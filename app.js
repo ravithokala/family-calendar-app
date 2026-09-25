@@ -104,9 +104,7 @@ const clock = (at) => new Date(at).toLocaleTimeString('en-GB', { hour: '2-digit'
  * The "Updated …" line; tapping it refreshes now.
  * @param {string} text
  */
-const refreshLink = (text) => el('p', { class: 'status muted', onclick: () => show(true) }, `${text} · tap to refresh`,
-  // The app's version where it is seen every day, not only at the bottom of More (RT, 2026-09-25).
-  el('br'), `Version ${VERSION}`);
+const refreshLink = (text) => el('p', { class: 'status muted', onclick: () => show(true) }, `${text} · tap to refresh`);
 
 /** The version this phone last ran, to say once when an update has arrived. */
 const SEEN_VERSION_KEY = 'fc.version';
@@ -430,6 +428,8 @@ function showSignedIn() {
     el('button', { class: 'link', onclick: async () => { await signOut(); signOutOfGoogle(); cache.clear(); location.hash = ''; location.reload(); } }, 'Sign out'));
   $('filters').replaceChildren(...views.map((v) => el('button', { 'data-view': v, onclick: () => go({ view: v }) }, v === 'FAMILY' ? 'Family' : v)));
   $('pending').onclick = () => go({ screen: 'review' });
+  // Tapping the title shows the app's version (RT, 2026-09-25: out of the way, one tap from anywhere).
+  $('app-title').onclick = () => toast(`Family Cal · version ${VERSION}`);
   $('tabs').replaceChildren(...TABS.map((screen) => el('button', {
     'data-screen': screen,
     onclick: () => go({ screen, date: screen === 'today' ? today() : readState().date }),
