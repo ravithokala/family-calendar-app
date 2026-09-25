@@ -519,10 +519,13 @@ const SWIPE_PX = 60;
 function enableSwipe() {
   /** @type {{ x: number, y: number, at: number } | null} */
   let start = null;
-  $('main').addEventListener('touchstart', (/** @type {TouchEvent} */ e) => {
-    start = e.touches.length === 1 ? { x: e.touches[0].clientX, y: e.touches[0].clientY, at: Date.now() } : null;
+  // The whole screen, not just the content: a quiet Day ends halfway down (RT, 2026-09-25).
+  // Not while a sheet (a form, an event's details) is open.
+  document.addEventListener('touchstart', (/** @type {TouchEvent} */ e) => {
+    start = e.touches.length === 1 && !document.querySelector('dialog[open]')
+      ? { x: e.touches[0].clientX, y: e.touches[0].clientY, at: Date.now() } : null;
   }, { passive: true });
-  $('main').addEventListener('touchend', (/** @type {TouchEvent} */ e) => {
+  document.addEventListener('touchend', (/** @type {TouchEvent} */ e) => {
     const from = start;
     start = null;
     const s = readState();
