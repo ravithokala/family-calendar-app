@@ -63,8 +63,8 @@ function go(change) {
 }
 
  /**
- * What the forms need: the vocabularies, the API, and what to do after a save: forget saved
- * screens (they are out of date now), redraw from the server, and say what happened.
+ * What the forms need: the vocabularies, the API, and what to do after a save: mark saved
+ * screens out of date, redraw from the server, and say what happened.
  * @returns {import('./views/forms.js').FormContext}
  */
 const formContext = () => ({
@@ -72,7 +72,10 @@ const formContext = () => ({
   call,
   openList: (/** @type {string} */ listId) => go({ screen: 'lists', list: listId }),
   saved: (message, r) => {
-    cache.clearDays();
+    // Saved months stay on screen while they refresh, instead of a first-time "Loading…" (RT, 2026-09-25).
+    cache.staleCalendar();
+    ['more', 'review', 'lists'].forEach(cache.forget);
+    listsData = null;
     toast(message, r.warnings);
     show(true);
   },

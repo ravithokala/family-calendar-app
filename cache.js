@@ -89,14 +89,6 @@ export function covering(from, to) {
   };
 }
 
-/** Forgets every saved calendar range and the More lists, e.g. after a change. */
-export function clearDays() {
-  try {
-    Object.keys(localStorage).filter((k) => k.startsWith(`${PREFIX}days:`) || k === `${PREFIX}more` || k === `${PREFIX}review` || k === `${PREFIX}lists`)
-      .forEach((k) => localStorage.removeItem(k));
-  } catch (e) { /* ignore */ }
-}
-
 /**
  * Marks saved calendar ranges as out of date without dropping them, e.g. after a list change that
  * shows under "To do" (ADR-085): the calendar still draws at once and refreshes behind (RT, 2026-09-25).

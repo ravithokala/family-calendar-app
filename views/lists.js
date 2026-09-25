@@ -289,9 +289,8 @@ export function listDetail(screen, listId, today) {
   const list = screen.data.lists.find((l) => l.list_id === listId);
   if (!list) return el('div', {}, el('p', { class: 'muted' }, 'This list is not here any more.'), el('button', { class: 'link', type: 'button', onclick: () => screen.open(null) }, '‹ All lists'));
   const items = screen.data.items.filter((i) => i.list_id === listId);
-  const open = items.filter((i) => i.status !== 'DONE')
-    // Due items first, soonest first; then the rest in the order they were added.
-    .sort((a, b) => (a.due_date ?? '9999').localeCompare(b.due_date ?? '9999'));
+  // Newest first, so what was just added is at the top (RT, 2026-09-25).
+  const open = items.filter((i) => i.status !== 'DONE').reverse();
   const done = items.filter((i) => i.status === 'DONE');
   const event = list.event_id ? screen.data.events.find((e) => e.event_id === list.event_id) : undefined;
 
