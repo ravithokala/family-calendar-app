@@ -213,3 +213,6 @@ textarea.prompt { font: 12px/1.35 ui-monospace, Menlo, Consolas, monospace; back
 .search-button { font-size: 18px; padding: 2px 6px; }
 .search-input { width: 100%; box-sizing: border-box; font: inherit; font-size: 16px; padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); color: var(--text); }
 .search-results h3 { margin: 14px 0 2px; }
+/* System check (ADR-095). */
+.check-ok { color: var(--ok, #2E7D32); font-weight: 700; }
+.check-fail { color: var(--bad); font-weight: 700; }

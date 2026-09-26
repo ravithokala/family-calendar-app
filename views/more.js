@@ -9,6 +9,7 @@ import { printSheet } from './print.js';
 import { schoolsSection } from './schools.js';
 import { routineDetail, runningSchedules, scheduleText, endedOn } from './routines.js';
 import { removedSection } from './removed.js';
+import { systemSection } from './system.js';
 
 /**
  * The More screen: review and sources, printing, routines (list, add, change, end), school
@@ -62,5 +63,6 @@ export function moreView(ctx, data, nav) {
       el('p', { class: 'muted small' }, 'Tap a routine to change it from a date, end it, or change its icon.')),
     schoolsSection(ctx, data.periods, nav.today),
     data.removed ? removedSection(ctx, data.removed) : '',
+    systemSection(ctx),
     el('p', { class: 'muted small version' }, `Family Cal · version ${VERSION}`));
 }
