@@ -6,7 +6,7 @@ import { el } from '../dom.js';
 import { listsOverview, listDetail, listSheet, isUnsaved, hasPendingSaves } from '../views/lists.js';
 import { toast } from '../views/sheet.js';
 import { formContext } from './context.js';
-import { $, app, go, readState, today, isCurrent, drawSaved, showError } from './state.js';
+import { $, app, go, readState, today, isCurrent, drawSaved, showError, clock, refreshLink } from './state.js';
 
 /**
  * The copy of the lists in memory: one for every visit to Lists, so saves still running from an
@@ -32,6 +32,22 @@ export function addOnLists() {
     return;
   }
   if (onScreen) listSheet(onScreen);
+}
+
+/** When the lists were last fetched from the server, for the "Updated …" line. */
+let fetchedAt = 0;
+
+/**
+ * The "Updated … · tap to refresh" line under Lists, as on Month and More: a phone app opened
+ * from the home screen has no pull-down to refresh (RT, 2026-09-26).
+ */
+const updatedLine = () => refreshLink(`Updated ${clock(fetchedAt)}`);
+
+/** Keeps the line's time current when a check finds nothing new (no redraw). */
+function markFetched() {
+  fetchedAt = Date.now();
+  const line = document.querySelector('#main > .status');
+  if (line) line.replaceWith(updatedLine());
 }
 
 /** Whether a new list or item is still being saved. */
@@ -69,10 +85,11 @@ function pollWhileOpen(mine, drawIt) {
       if (!r.ok || !isCurrent(mine) || busySaving()) return;
       const changed = JSON.stringify(r.data) !== JSON.stringify(listsData);
       cache.write('lists', r.data);
+      markFetched();
       if (!changed) return;
       listsData = r.data;
       if (!document.querySelector('dialog[open]') && !(/** @type {HTMLInputElement|null} */ (document.querySelector('.add-input'))?.value)) {
-        $('main').replaceChildren(drawIt());
+        $('main').replaceChildren(drawIt(), updatedLine());
       }
     } catch (e) {
       // The next check tries again.
@@ -98,7 +115,7 @@ export async function showLists(mine, force = false, fresh = false) {
     get data() { return /** @type {import('../views/lists.js').ListsData} */ (listsData); },
     set data(v) { listsData = v; },
     open: (listId) => go({ screen: 'lists', list: listId }),
-    redraw: () => { if (readState().screen === 'lists') $('main').replaceChildren(drawIt()); },
+    redraw: () => { if (readState().screen === 'lists') $('main').replaceChildren(drawIt(), updatedLine()); },
     // A list change can change what the calendar shows under "To do": saved months stay, but refresh.
     persist: () => { cache.write('lists', screen.data); cache.staleCalendar(); },
     reload: () => { if (isCurrent(mine)) app.show(true); },
@@ -109,7 +126,8 @@ export async function showLists(mine, force = false, fresh = false) {
   // The address, not the state when drawing began: a new list's id changes once it is saved.
   const drawIt = () => { const list = readState().list; return list ? listDetail(screen, list, today()) : listsOverview(screen); };
   const savedView = saved ? drawSaved(drawIt) : null;
-  if (savedView) $('main').replaceChildren(savedView);
+  fetchedAt = saved?.at || fetchedAt;
+  if (savedView) $('main').replaceChildren(savedView, updatedLine());
   else $('main').replaceChildren(el('p', { class: 'muted' }, 'Loading…'));
   pollWhileOpen(mine, drawIt);
   // Always ask: lists are shared and change often, so even a minute-old copy may miss the other
@@ -125,7 +143,9 @@ export async function showLists(mine, force = false, fresh = false) {
     cache.write('lists', r.data);
     // Keep what is being typed: only redraw if the quick-add box is empty.
     const typing = /** @type {HTMLInputElement|null} */ (document.querySelector('.add-input'))?.value;
-    if (!typing) $('main').replaceChildren(drawIt());
+    fetchedAt = Date.now();
+    if (!typing) $('main').replaceChildren(drawIt(), updatedLine());
+    else markFetched();
   } catch (e) {
     if (!isCurrent(mine)) return;
     if (!savedView) showError(`Could not load: ${e instanceof Error ? e.message : String(e)}`);
