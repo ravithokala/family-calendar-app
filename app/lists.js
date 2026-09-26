@@ -3,7 +3,7 @@
 import { call } from '../api.js';
 import * as cache from '../cache.js';
 import { el } from '../dom.js';
-import { listsOverview, listDetail, isUnsaved, hasPendingSaves } from '../views/lists.js';
+import { listsOverview, listDetail, listSheet, isUnsaved, hasPendingSaves } from '../views/lists.js';
 import { toast } from '../views/sheet.js';
 import { formContext } from './context.js';
 import { $, app, go, readState, today, isCurrent, drawSaved, showError } from './state.js';
@@ -17,6 +17,22 @@ let listsData = null;
 
 /** The lists as this phone holds them now, for searching their items. */
 export const currentLists = () => listsData ?? cache.read('lists')?.data ?? null;
+
+/** The Lists screen on show, for the + button (RT, 2026-09-26). @type {import('../views/lists.js').ListsScreen|null} */
+let onScreen = null;
+
+/**
+ * The + button on Lists: inside a list, the "Add an item" box; on the overview, a new list.
+ */
+export function addOnLists() {
+  const box = /** @type {HTMLInputElement|null} */ (document.querySelector('.add-input'));
+  if (readState().list && box) {
+    box.scrollIntoView({ block: 'center' });
+    box.focus();
+    return;
+  }
+  if (onScreen) listSheet(onScreen);
+}
 
 /** Whether a new list or item is still being saved. */
 const busySaving = () => hasPendingSaves() || Boolean(listsData && (listsData.lists.some((l) => isUnsaved(l.list_id)) || listsData.items.some((i) => isUnsaved(i.item_id))));
@@ -89,6 +105,7 @@ export async function showLists(mine, force = false, fresh = false) {
     // A new list got its real id: point the address at it without drawing again.
     renamed: (from, to) => { if (location.hash.endsWith(`/${from}`)) history.replaceState(null, '', location.hash.replace(`/${from}`, `/${to}`)); },
   };
+  onScreen = screen;
   // The address, not the state when drawing began: a new list's id changes once it is saved.
   const drawIt = () => { const list = readState().list; return list ? listDetail(screen, list, today()) : listsOverview(screen); };
   const savedView = saved ? drawSaved(drawIt) : null;

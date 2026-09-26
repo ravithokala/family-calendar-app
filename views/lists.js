@@ -36,7 +36,7 @@ function eventSelect(data, current) {
  * @param {ListsScreen} screen
  * @param {List} [list]
  */
-function listSheet(screen, list) {
+export function listSheet(screen, list) {
   const title = input('text', list?.title ?? null, { placeholder: 'e.g. India shopping' });
   const event = eventSelect(screen.data, list?.event_id ?? null);
   const form = el('div', { class: 'form' },

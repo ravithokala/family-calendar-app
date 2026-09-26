@@ -3,7 +3,7 @@
 import { user, signOutOfGoogle } from '../auth.js';
 import { call, signOut } from '../api.js';
 import { searchSheet, listSearchSheet } from '../views/search.js';
-import { currentLists } from './lists.js';
+import { currentLists, addOnLists } from './lists.js';
 import * as cache from '../cache.js';
 import { el, addDays } from '../dom.js';
 import { eventSheet, routineSheet, reminderSheet } from '../views/forms.js';
@@ -136,6 +136,8 @@ export function showSignedIn() {
   $('add').onclick = () => {
     const ctx = formContext();
     const s = readState();
+    // On Lists, + is about lists (RT, 2026-09-26: it opened a new event).
+    if (s.screen === 'lists') { addOnLists(); return; }
     const date = s.screen === 'day' ? s.date : today();
     const menu = openSheet('Add', el('div', { class: 'add-menu' },
       captureBox(ctx, () => menu.close(), user()),
