@@ -216,3 +216,10 @@ textarea.prompt { font: 12px/1.35 ui-monospace, Menlo, Consolas, monospace; back
 /* System check (ADR-095). */
 .check-ok { color: var(--ok, #2E7D32); font-weight: 700; }
 .check-fail { color: var(--bad); font-weight: 700; }
+/* Routines chip and cancelled sessions struck through (ADR-096): on one line with the person
+   filters, and styled as an on/off switch rather than another person. */
+#filters button { padding: 4px 10px; white-space: nowrap; }
+#filters .routines-chip { margin-left: auto; }
+#filters .routines-chip[aria-pressed="true"] { background: var(--soft); color: var(--accent); border-color: var(--accent); font-weight: 600; }
+#filters .routines-chip[aria-pressed="false"] { color: var(--muted); text-decoration: line-through; }
+.chip.struck, .pill.struck { text-decoration: line-through; opacity: 0.6; }

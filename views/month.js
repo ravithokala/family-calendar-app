@@ -32,7 +32,7 @@ export function monthView(theme, data, monthStart, today, openDay, view) {
     },
     el('span', { class: 'num' }, String(Number(day.date.slice(8)))),
     label ? el('span', { class: 'school-label' }, label) : '',
-    shown.map((i) => el('span', { class: 'chip', style: toneStyle(theme, i.tone) }, icon(theme, i.icon), i.title)),
+    shown.map((i) => el('span', { class: `chip${i.struck ? ' struck' : ''}`, style: toneStyle(theme, i.tone) }, icon(theme, i.icon), i.title)),
     extra > 0 ? el('span', { class: 'more' }, `+${extra + 1} more`) : '');
   });
   return el('div', { class: 'month' },

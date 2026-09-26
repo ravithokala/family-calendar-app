@@ -73,6 +73,16 @@ export function frame(s) {
   return { from: t, to: addDays(t, 1), title: 'Today', prev: null, next: null };
 }
 
+/** Whether this phone hides routines on Month and Week (ADR-096); remembered like the filter. */
+const ROUTINES_KEY = 'fc.routines';
+export function routinesHidden() {
+  try { return localStorage.getItem(ROUTINES_KEY) === 'hide'; } catch (e) { return false; }
+}
+/** @param {boolean} hide */
+export function setRoutinesHidden(hide) {
+  try { localStorage.setItem(ROUTINES_KEY, hide ? 'hide' : 'show'); } catch (e) { /* this visit only */ }
+}
+
 /** A saved screen younger than this is shown without asking the server again. */
 export const FRESH_MS = 60 * 1000;
 

@@ -11,7 +11,7 @@ import { showCalendar } from './app/calendar.js';
 import { showLists } from './app/lists.js';
 import { showMore, showReview } from './app/more.js';
 import { showSignedIn, announceUpdate } from './app/chrome.js';
-import { $, app, go, readState, frame, today, nextTurn, showError } from './app/state.js';
+import { $, app, go, readState, frame, today, nextTurn, showError, routinesHidden } from './app/state.js';
 
 /**
  * The family app (ADR-078, ADR-080). It holds no calendar rules and no family data: everything
@@ -30,7 +30,12 @@ async function show(force = false, fresh = false) {
   const f = frame(s);
   const mine = nextTurn();
   document.querySelectorAll('#tabs button').forEach((b) => b.setAttribute('aria-current', String(b.getAttribute('data-screen') === s.screen)));
-  document.querySelectorAll('#filters button').forEach((b) => b.setAttribute('aria-pressed', String(b.getAttribute('data-view') === s.view)));
+  document.querySelectorAll('#filters button[data-view]').forEach((b) => b.setAttribute('aria-pressed', String(b.getAttribute('data-view') === s.view)));
+  const routines = /** @type {HTMLElement|null} */ (document.querySelector('#filters [data-routines]'));
+  if (routines) {
+    routines.hidden = s.screen !== 'month' && s.screen !== 'week';
+    routines.setAttribute('aria-pressed', String(!routinesHidden()));
+  }
   $('title').textContent = f.title;
   $('print-button').hidden = s.screen !== 'month';
   $('print-button').onclick = () => printSheet(formContext(), today(), s.date.slice(0, 7));

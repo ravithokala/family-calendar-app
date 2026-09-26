@@ -11,7 +11,7 @@ import { captureBox } from '../views/capture.js';
 import { openSheet, toast } from '../views/sheet.js';
 import { VERSION } from '../version.js';
 import { formContext } from './context.js';
-import { $, app, TABS, go, readState, frame, today, FRESH_MS, shownAgo } from './state.js';
+import { $, app, TABS, go, readState, frame, today, FRESH_MS, shownAgo, routinesHidden, setRoutinesHidden } from './state.js';
 
 /**
  * Everything around the screens: the header (account, filters, review badge, title), the bottom
@@ -119,7 +119,9 @@ export function showSignedIn() {
     el('button', { id: 'search-button', class: 'link search-button', type: 'button', 'aria-label': 'Search', onclick: openSearch }, '🔍'),
     el('span', { class: 'muted' }, user() ?? ''),
     el('button', { class: 'link', onclick: async () => { await signOut(); signOutOfGoogle(); cache.clear(); location.hash = ''; location.reload(); } }, 'Sign out'));
-  $('filters').replaceChildren(...app.views.map((v) => el('button', { 'data-view': v, onclick: () => go({ view: v }) }, v === 'FAMILY' ? 'Family' : v)));
+  $('filters').replaceChildren(...app.views.map((v) => el('button', { 'data-view': v, onclick: () => go({ view: v }) }, v === 'FAMILY' ? 'Family' : v)),
+    // Routines on or off for Month and Week (ADR-096): pressed means shown.
+    el('button', { 'data-routines': '', class: 'routines-chip', 'aria-label': 'Show routines', onclick: () => { setRoutinesHidden(!routinesHidden()); app.show(); } }, '⟳ Routines'));
   $('pending').onclick = () => go({ screen: 'review' });
   $('tabs').replaceChildren(...TABS.map((screen) => el('button', {
     'data-screen': screen,

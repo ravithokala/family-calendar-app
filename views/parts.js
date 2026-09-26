@@ -6,10 +6,11 @@ import { el } from '../dom.js';
  * Pieces shared by the calendar screens. Colours, drawings and labels all come from the server
  * (the printed calendar's theme, ADR-080), so the app and the fridge agree.
  *
- * @typedef {{ event_id: string, title: string, label: string, tone: string, icon: string, event_type: string,
+ * @typedef {{ event_id: string, title: string, label: string, tone: string|null, icon: string|null, event_type: string,
  *   all_day: boolean, start_time: string|null, end_time: string|null,
  *   span: { start_date: string, end_date: string, first: boolean, last: boolean } | null,
  *   participants: string[], related_people: string[], location: string|null, notes: string|null, routine: boolean,
+ *   exception?: boolean, struck?: boolean,
  *   edit: { start_date: string|null, end_date: string|null, calendars: string[], icon: string|null, all_day: boolean|null } | null,
  *   lists?: Array<{ list_id: string, title: string, done: number, total: number }> }} AppItem
  * @typedef {{ event_id: string, title: string, participants: string[], start_time: string|null, end_time: string|null, routine: boolean }} CancelledItem
@@ -31,10 +32,10 @@ const SVG = 'http://www.w3.org/2000/svg';
 /**
  * A drawn icon, from the printed calendar's line drawings (server data, not user text).
  * @param {Theme} theme
- * @param {string} name
+ * @param {string|null} name
  */
 export function icon(theme, name) {
-  const paths = theme.icons[name];
+  const paths = name === null ? undefined : theme.icons[name];
   if (!paths) return null;
   const svg = document.createElementNS(SVG, 'svg');
   svg.setAttribute('viewBox', '0 0 24 24');
@@ -48,9 +49,9 @@ export function icon(theme, name) {
   return svg;
 }
 
-/** @param {Theme} theme @param {string} tone */
+/** @param {Theme} theme @param {string|null} tone */
 export function toneStyle(theme, tone) {
-  const t = theme.tones[tone] ?? { background: 'var(--soft)', text: 'var(--text)' };
+  const t = (tone === null ? undefined : theme.tones[tone]) ?? { background: 'var(--soft)', text: 'var(--text)' };
   return { background: t.background, color: t.text, ...(t.bar ? { borderLeft: `4px solid ${t.bar}` } : {}) };
 }
 
@@ -119,7 +120,7 @@ export function itemRow(theme, i, onItem) {
   return el('li', { class: `item${onItem ? ' tappable' : ''}`, onclick: onItem ? () => onItem(i) : undefined },
     el('span', { class: 'time' }, timeText(i)),
     el('div', { class: 'body' },
-      el('span', { class: 'pill', style: toneStyle(theme, i.tone) }, icon(theme, i.icon), i.label),
+      el('span', { class: `pill${i.struck ? ' struck' : ''}`, style: toneStyle(theme, i.tone) }, icon(theme, i.icon), i.label),
       details ? el('div', { class: 'details' }, details) : ''));
 }
 

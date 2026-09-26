@@ -12,7 +12,7 @@ import { toast } from '../views/sheet.js';
 import { busy } from '../views/fields.js';
 import { formContext } from './context.js';
 import { acceptBackgroundLists } from './lists.js';
-import { $, app, go, today, FRESH_MS, isCurrent, clock, refreshLink, drawSaved, showError, showPending } from './state.js';
+import { $, app, go, today, FRESH_MS, isCurrent, clock, refreshLink, drawSaved, showError, showPending, routinesHidden } from './state.js';
 
 /**
  * The calendar screens: Today, Month (default), Week and Day, each for one filter (ADR-080). The
@@ -31,14 +31,17 @@ class AppOutOfDate extends Error {}
 function draw(s, all) {
   if (!all.views) throw new AppOutOfDate();
   const chosen = all.views[s.view] ?? all.views.FAMILY;
+  // Routines hidden on Month and Week: what is different stays, changed and cancelled sessions too (ADR-096).
+  const days = routinesHidden() && (s.screen === 'month' || s.screen === 'week') ? chosen.days.map(withoutRoutines) : chosen.days;
   /** @type {import('../views/parts.js').DaysData} */
-  const data = { from: all.from, to: all.to, days: chosen.days, reminders: chosen.reminders, pending: all.pending, todos: chosen.todos ?? [] };
+  const data = { from: all.from, to: all.to, days, reminders: chosen.reminders, pending: all.pending, todos: chosen.todos ?? [] };
   const t = /** @type {import('../views/parts.js').Theme} */ (app.theme);
   const byDate = new Map(data.days.map((d) => [d.date, d]));
   const openDay = (/** @type {string} */ date) => go({ screen: 'day', date });
   const ctx = formContext();
   /** @param {string} date */
-  const onItem = (date) => (/** @type {import('../views/parts.js').AppItem} */ item) => eventDetails(ctx, t, item, date);
+  // A struck-through cancelled session opens its Day, where it can be restored.
+  const onItem = (date) => (/** @type {import('../views/parts.js').AppItem} */ item) => (item.struck ? openDay(date) : eventDetails(ctx, t, item, date));
   const onRestore = async (/** @type {import('../views/parts.js').CancelledItem} */ c, /** @type {HTMLButtonElement} */ button) => {
     const r = await busy(button, () => call('events.restore', { event_id: c.event_id }));
     if (r.ok) ctx.saved(`Restored "${c.title}".`, r);
@@ -82,6 +85,21 @@ function draw(s, all) {
     todoSection(data.todos.filter((x) => x.due_date === data.from), todoActions),
     daySection(t, `Tomorrow · ${niceDate(tomorrow)}`, byDate.get(tomorrow), { onTitle: () => openDay(tomorrow), onItem: onItem(tomorrow) }),
     remindersOn(data.reminders, data.from));
+}
+
+/**
+ * A day without its ordinary routine sessions: one-offs and changed sessions stay, and cancelled
+ * sessions are added struck through, since "no football on Saturday" is news (ADR-096).
+ * @param {import('../views/parts.js').AppDay} day
+ * @returns {import('../views/parts.js').AppDay}
+ */
+function withoutRoutines(day) {
+  const struck = (day.cancelled ?? []).filter((c) => c.routine).map((c) => /** @type {import('../views/parts.js').AppItem} */ ({
+    event_id: c.event_id, title: c.title, label: `${c.participants.join('+')} - ${c.title}`, tone: null, icon: null, event_type: 'ROUTINE',
+    all_day: c.start_time === null, start_time: c.start_time, end_time: c.end_time, span: null, participants: c.participants,
+    related_people: [], location: null, notes: null, routine: true, exception: false, struck: true, edit: null, lists: [],
+  }));
+  return { ...day, items: [...day.items.filter((i) => !i.routine || i.exception), ...struck] };
 }
 
 /**
