@@ -46,13 +46,18 @@ async function show(force = false, fresh = false) {
 }
 app.show = show;
 
+/** Set when the saved settings were used, so they are refreshed once the calendar is in. */
+let refreshMetaLater = false;
+
 /** The theme and filters, cached so the calendar can draw before the server answers. */
 async function loadMeta() {
   const saved = cache.read('meta');
   const apply = (/** @type {any} */ m) => { app.theme = m.theme; app.views = m.views; app.meta = m; };
   if (saved) {
     apply(saved.data);
-    call('meta.get').then((r) => { if (r.ok) cache.write('meta', r.data); }).catch(() => { /* next time */ });
+    // Refreshed after the calendar, not alongside it: one request at a time at start-up, so the
+    // calendar's is not slowed by another starting at once (RT, 2026-09-26).
+    refreshMetaLater = true;
     return;
   }
   const r = await call('meta.get');
@@ -90,6 +95,7 @@ async function start() {
   showSignedIn();
   announceUpdate();
   await show();
+  if (refreshMetaLater) call('meta.get').then((r) => { if (r.ok) cache.write('meta', r.data); }).catch(() => { /* next time */ });
 }
 
 start();
