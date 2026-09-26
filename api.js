@@ -5,11 +5,11 @@ import { session, saveSession, forgetSession, googleToken } from './auth.js';
 
 /**
  * @typedef {{ field: string, code: string, message: string }} Issue
- * @typedef {{ ok: boolean, data: any, errors: Issue[], warnings: Issue[], server_ms?: number }} ApiResponse
+ * @typedef {{ ok: boolean, data: any, errors: Issue[], warnings: Issue[], server_ms?: number, setup_ms?: number, served?: string }} ApiResponse
  */
 
 /** How long the last call took, end to end and on the server. */
-export let lastTiming = { total_ms: 0, server_ms: /** @type {number|null} */ (null) };
+export let lastTiming = { total_ms: 0, server_ms: /** @type {number|null} */ (null), setup_ms: /** @type {number|null} */ (null), served: /** @type {string|null} */ (null) };
 
 /**
  * One POST. The body is plain text, so the browser sends it without a CORS pre-flight,
@@ -28,7 +28,7 @@ async function post(body) {
   if (!response.ok) throw new Error(`The server answered ${response.status}`);
   /** @type {ApiResponse} */
   const result = await response.json();
-  lastTiming = { total_ms: Math.round(performance.now() - started), server_ms: result.server_ms ?? null };
+  lastTiming = { total_ms: Math.round(performance.now() - started), server_ms: result.server_ms ?? null, setup_ms: result.setup_ms ?? null, served: result.served ?? null };
   return result;
 }
 

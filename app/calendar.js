@@ -213,7 +213,10 @@ export async function showCalendar(mine, s, f, force, fresh) {
     showPending(r.data.pending);
     try { sessionStorage.removeItem('fc.reloaded'); } catch (e) { /* ignore */ }
     const shown = cache.covering(f.from, f.to);
-    const server = lastTiming.server_ms === null ? '' : ` · server ${(lastTiming.server_ms / 1000).toFixed(1)} s`;
+    // Where the server's time went (RT, 2026-09-26: a slow first open): set-up (session, workbook),
+    // and whether the answer came from its memory or was rebuilt.
+    const parts = [lastTiming.setup_ms === null ? '' : `set-up ${(lastTiming.setup_ms / 1000).toFixed(1)} s`, lastTiming.served ?? ''].filter(Boolean).join(', ');
+    const server = lastTiming.server_ms === null ? '' : ` · server ${(lastTiming.server_ms / 1000).toFixed(1)} s${parts ? ` (${parts})` : ''}`;
     $('main').replaceChildren(draw(s, shown ? shown.data : r.data),
       refreshLink(`Updated ${clock(Date.now())} · ${(lastTiming.total_ms / 1000).toFixed(1)} s${server}`));
     prefetchAround(s.date).then(prefetchScreens);
