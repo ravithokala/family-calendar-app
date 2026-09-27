@@ -169,7 +169,7 @@ export function routineSheet(ctx, prefill = {}) {
     field('Whose', f.person.node), field('Name', f.name.node), field('Kind', f.category.node),
     field('Days', f.days.node), el('div', { class: 'row' }, field('Start', f.start.node), field('End', f.end.node)),
     el('div', { class: 'row' }, field('From', f.from.node), field('Until (optional)', f.until.node)),
-    termRow, field('Where', f.location.node), field('Where this came from', f.source.node),
+    termRow, field('Where', f.location.node), field('Where this came from (optional)', f.source.node),
     el('div', { class: 'actions' }, saveButton('Add routine', async () => {
       const person = f.person.get()[0] ?? null;
       const name = f.name.get();
@@ -184,7 +184,8 @@ export function routineSheet(ctx, prefill = {}) {
           default_start_time: f.start.get(), default_end_time: f.end.get(), location: f.location.get(),
         },
         schedule: { name: 'Weekly', valid_from: f.from.get(), valid_to: f.until.get(), day_of_week: dayNames },
-        source: { title: f.source.get() },
+        // Optional (RT, 2026-09-27: left blank, the save failed with "source.title is required").
+        source: { title: f.source.get() ?? 'Added in the app' },
       });
       if (!r.ok) { showIssues(sheet.messages, r); return; }
       sheet.close();
