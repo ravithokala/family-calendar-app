@@ -32,6 +32,40 @@ export const runningSchedules = (a, schedules, today) => schedules
   .sort((x, y) => (x.valid_from ?? '').localeCompare(y.valid_from ?? ''));
 
 /**
+ * Routines in the order More lists them (RT, 2026-09-27): by person, children first then the
+ * adults, and each person's in the order the week runs, by first day then start time. Uses the
+ * schedules still running, or for an ended routine all of its schedules.
+ * @param {Activity[]} activities
+ * @param {Schedule[]} schedules
+ * @param {string} today
+ * @param {{ participants: string[], children: string[], weekdays: string[] }} meta
+ */
+export function routineOrder(activities, schedules, today, meta) {
+  const people = [...meta.children, ...meta.participants.filter((p) => !meta.children.includes(p))];
+  const personRank = (/** @type {string} */ p) => (people.includes(p) ? people.indexOf(p) : people.length);
+  /** @param {Activity} a */
+  const firstSlot = (a) => {
+    const running = runningSchedules(a, schedules, today);
+    const own = running.length ? running : schedules.filter((s) => s.activity_id === a.activity_id);
+    let best = { day: 7, start: '' };
+    for (const s of own) {
+      const start = s.start_time ?? a.default_start_time ?? '';
+      for (const d of s.day_of_week ?? []) {
+        const day = meta.weekdays.indexOf(d);
+        if (day >= 0 && (day < best.day || (day === best.day && start < best.start))) best = { day, start };
+      }
+    }
+    return best;
+  };
+  const slots = new Map(activities.map((a) => [a.activity_id, firstSlot(a)]));
+  return [...activities].sort((a, b) => {
+    const x = /** @type {{ day: number, start: string }} */ (slots.get(a.activity_id));
+    const y = /** @type {{ day: number, start: string }} */ (slots.get(b.activity_id));
+    return personRank(a.person) - personRank(b.person) || x.day - y.day || x.start.localeCompare(y.start) || a.name.localeCompare(b.name);
+  });
+}
+
+/**
  * e.g. "Mon 18:00–19:00 until Sun 1 Nov" or "from Mon 2 Nov: Wed 17:00–18:00".
  * @param {Activity} a
  * @param {Schedule} s

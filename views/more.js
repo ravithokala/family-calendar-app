@@ -7,7 +7,7 @@ import { VERSION } from '../version.js';
 import { sourceSheet, recentSources } from './sources.js';
 import { printSheet } from './print.js';
 import { schoolsSection } from './schools.js';
-import { routineDetail, runningSchedules, scheduleText, endedOn } from './routines.js';
+import { routineDetail, runningSchedules, scheduleText, endedOn, routineOrder } from './routines.js';
 import { removedSection } from './removed.js';
 import { systemSection } from './system.js';
 
@@ -23,8 +23,7 @@ import { systemSection } from './system.js';
  */
 export function moreView(ctx, data, nav) {
   const messages = el('div', { class: 'messages' });
-  const routines = [...data.activities].filter((a) => a.active !== false)
-    .sort((a, b) => `${a.person}${a.name}`.localeCompare(`${b.person}${b.name}`));
+  const routines = routineOrder(data.activities.filter((a) => a.active !== false), data.schedules, nav.today, ctx.meta);
   const current = routines.filter((a) => runningSchedules(a, data.schedules, nav.today).length > 0);
   const ended = routines.filter((a) => runningSchedules(a, data.schedules, nav.today).length === 0);
   /** @param {any} a @param {boolean} isEnded */
