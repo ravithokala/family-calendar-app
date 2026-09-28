@@ -8,7 +8,8 @@ import { reminderSheet } from './forms.js';
 /**
  * Reminders under the Month grid, like the printed page's REMINDERS box (ADR-072, ADR-089): the
  * active ones whose window touches the month, most urgent first, just who and what; overdue ones
- * in red. Tapping one shows its dates with Edit, Done and Cancel.
+ * in red. Tapping one shows its dates with Edit, Done and Cancel; one from Household Admin shows
+ * its dates and a link to change it there instead (ADR-099).
  */
 
 /**
@@ -26,9 +27,18 @@ export function reminderActions(ctx, r, today) {
     ctx.saved(done, answer, () => ctx.call('reminders.setStatus', { reminder_id: r.reminder_id, status: 'ACTIVE' }));
   };
   const overdue = r.window_end < today;
+  const dates = el('p', { class: overdue ? 'overdue-text' : '' }, `${niceDate(r.window_start)} – ${niceDate(r.window_end)}${overdue ? ' · overdue' : ''}`);
+  const about = full.related_people.length ? el('p', { class: 'muted' }, `About ${full.related_people.join('+')}`) : '';
+  if (r.link) {
+    // Read-only here: it changes, and is finished, in Household Admin (ADR-099).
+    openSheet(`${r.owner.join('+')} - ${r.title}`, el('div', { class: 'form' }, dates, about,
+      el('p', { class: 'muted small' }, 'From Household Admin. Change it there, or mark it renewed there: this reminder follows on its own.'),
+      el('div', { class: 'actions' }, el('a', { class: 'link-button primary', href: r.link, target: '_blank', rel: 'noopener' }, 'Open in Household Admin'))));
+    return;
+  }
   const sheet = openSheet(`${r.owner.join('+')} - ${r.title}`, el('div', { class: 'form' },
-    el('p', { class: overdue ? 'overdue-text' : '' }, `${niceDate(r.window_start)} – ${niceDate(r.window_end)}${overdue ? ' · overdue' : ''}`),
-    full.related_people.length ? el('p', { class: 'muted' }, `About ${full.related_people.join('+')}`) : '',
+    dates,
+    about,
     full.notes ? el('p', { class: 'muted' }, full.notes) : '',
     el('div', { class: 'actions' },
       el('button', { class: 'secondary', type: 'button', onclick: () => { sheet.close(); reminderSheet(ctx, full); } }, 'Edit'),

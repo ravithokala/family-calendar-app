@@ -100,6 +100,8 @@ main { padding: 8px 12px calc(76px + env(safe-area-inset-bottom)); max-width: 82
 .more-fields[open] { display: flex; flex-direction: column; gap: 12px; }
 .actions { display: flex; gap: 10px; margin-top: 4px; }
 .actions button { flex: 1; font-size: 16px; padding: 12px; border-radius: 10px; cursor: pointer; }
+/* A link that looks like the sheet's main button (Open in Household Admin, ADR-099). */
+.actions a.link-button { flex: 1; font-size: 16px; padding: 12px; border-radius: 10px; text-align: center; text-decoration: none; background: var(--accent); color: var(--bg); font-weight: 600; }
 button.primary { background: var(--accent); color: var(--bg); border: 0; font-weight: 600; }
 button.danger { background: var(--bg); color: var(--bad); border: 1px solid var(--bad); }
 button:disabled { opacity: 0.6; }

@@ -17,7 +17,7 @@ import { el } from '../dom.js';
  * @typedef {{ person: string, period_type: string, kind: 'BREAK' | 'NO_SCHOOL' }} SchoolDay
  * @typedef {{ date: string, weekday: string, items: AppItem[], school: SchoolDay[], cancelled?: CancelledItem[] }} AppDay
  * @typedef {{ reminder_id: string, title: string, owner: string[], window_start: string, window_end: string,
- *   related_people?: string[], notes?: string|null, status?: string }} AppReminder
+ *   related_people?: string[], notes?: string|null, status?: string, link?: string|null }} AppReminder  link: from Household Admin (ADR-099)
  * @typedef {{ item_id: string, list_id: string, list_title: string, text: string, owner: string[], due_date: string, notes: string|null }} Todo
  * @typedef {{ from: string, to: string, days: AppDay[], reminders: AppReminder[], pending: number, todos: Todo[] }} DaysData  one filter's days
  * @typedef {{ from: string, to: string, views: Record<string, { days: AppDay[], reminders: AppReminder[], todos?: Todo[] }>, pending: number,
