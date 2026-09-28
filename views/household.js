@@ -24,7 +24,8 @@ export function householdSection(ctx) {
     const changes = [d.created ? `${d.created} added` : '', d.updated ? `${d.updated} updated` : '', d.done + d.cancelled ? `${d.done + d.cancelled} closed` : '']
       .filter(Boolean);
     const unknown = d.unknown ? ` ${d.unknown} item${d.unknown === 1 ? ' has' : 's have'} a code this calendar does not know (see System check).` : '';
-    ctx.saved(`Household Admin: ${changes.length ? changes.join(', ') : 'already up to date'}.${unknown}`, r);
+    const unreadable = d.unreadable ? ` ${d.unreadable} item${d.unreadable === 1 ? ' has' : 's have'} a due date that cannot be read: set it in Household Admin.` : '';
+    ctx.saved(`Household Admin: ${changes.length ? changes.join(', ') : 'already up to date'}.${unknown}${unreadable}`, r);
   };
   return el('section', { id: 'household' },
     el('div', { class: 'section-head' }, el('h2', {}, 'Household Admin')),
