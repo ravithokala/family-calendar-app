@@ -9,6 +9,7 @@
  * The address then names the version being loaded (no device storage), so a stale copy can never
  * reload in a loop. The saved copy is never deleted from here.
  * The design is the Property Portfolio's.
+ * Only `export { … }` at the end: the portfolio's offline tests run this file as a plain script.
  */
 
 /** At most one check a minute, unless asked. */
@@ -42,7 +43,7 @@ function workerVersion(worker) {
  *   busy: whether something half-done is on screen (an open form) that a reload would throw away
  * @returns {(force?: boolean) => Promise<boolean>}  check now; answers whether the page is reloading
  */
-export function watchForUpdates(app) {
+function watchForUpdates(app) {
   let checkedAt = 0;
 
   /** @param {boolean} [force] */
@@ -104,3 +105,5 @@ export function watchForUpdates(app) {
   check(false);
   return check;
 }
+
+export { watchForUpdates };
