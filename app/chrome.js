@@ -1,7 +1,7 @@
 // @ts-check
 
-import { user, signOutOfGoogle } from '../auth.js';
-import { call, signOut } from '../api.js';
+import { user } from '../auth.js';
+import { call } from '../api.js';
 import { searchSheet, listSearchSheet } from '../views/search.js';
 import { currentLists, addOnLists } from './lists.js';
 import * as cache from '../cache.js';
@@ -117,8 +117,8 @@ export function showSignedIn() {
   $('account').replaceChildren(
     // Search (ADR-094): its own button; the version stays on the title.
     el('button', { id: 'search-button', class: 'link search-button', type: 'button', 'aria-label': 'Search', onclick: openSearch }, '🔍'),
-    el('span', { class: 'muted' }, user() ?? ''),
-    el('button', { class: 'link', onclick: async () => { await signOut(); signOutOfGoogle(); cache.clear(); location.hash = ''; location.reload(); } }, 'Sign out'));
+    // Who is signed in; Sign out is in More → Account (ADR-101).
+    el('span', { class: 'muted' }, user() ?? ''));
   $('filters').replaceChildren(...app.views.map((v) => el('button', { 'data-view': v, onclick: () => go({ view: v }) }, v === 'FAMILY' ? 'Family' : v)),
     // Routines on or off for Month and Week (ADR-096): pressed means shown.
     el('button', { 'data-routines': '', class: 'routines-chip', 'aria-label': 'Show routines', onclick: () => { setRoutinesHidden(!routinesHidden()); app.show(); } }, '⟳ Routines'));

@@ -37,8 +37,11 @@ function get(key) {
   try { return localStorage.getItem(key); } catch (e) { return null; }
 }
 
-/** The app session key, if this phone is signed in. */
-export const session = () => get(SESSION);
+/** The app session key, if this phone is signed in. Anything that is not a key counts as signed out. */
+export const session = () => {
+  const key = get(SESSION);
+  return key !== null && /^[0-9a-f]{64}$/.test(key) ? key : null;
+};
 
 /** The application user (e.g. RT). */
 export const user = () => get(USER);

@@ -5,8 +5,8 @@
  * sites (the API, Google sign-in) are left to the network.
  * Only VERSION and SHELL are this app's own: the logic below the marker line comes from app-kit (ADR-100).
  */
-const VERSION = 'shell-v62';
-const SHELL = ['./', 'index.html', 'app.js', 'app/state.js', 'app/context.js', 'app/calendar.js', 'app/lists.js', 'app/more.js', 'app/chrome.js', 'api.js', 'auth.js', 'cache.js', 'config.js', 'version.js', 'dom.js', 'views/parts.js', 'views/month.js', 'views/forms.js', 'views/fields.js', 'views/sheet.js', 'views/more.js', 'views/review.js', 'views/sources.js', 'views/print.js', 'views/capture.js', 'views/schools.js', 'views/lists.js', 'views/routines.js', 'views/removed.js', 'views/reminders.js', 'views/search.js', 'views/system.js', 'views/household.js', 'styles.css',
+const VERSION = 'shell-v63';
+const SHELL = ['./', 'index.html', 'app.js', 'app/state.js', 'app/context.js', 'app/calendar.js', 'app/lists.js', 'app/more.js', 'app/chrome.js', 'api.js', 'auth.js', 'cache.js', 'config.js', 'version.js', 'dom.js', 'views/parts.js', 'views/month.js', 'views/forms.js', 'views/fields.js', 'views/sheet.js', 'views/more.js', 'views/review.js', 'views/sources.js', 'views/print.js', 'views/capture.js', 'views/schools.js', 'views/lists.js', 'views/routines.js', 'views/removed.js', 'views/reminders.js', 'views/search.js', 'views/system.js', 'views/household.js', 'views/account.js', 'styles.css',
   'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png', 'icons/apple-touch-icon.png'];
 
 // ---- Below this line: app-kit/pwa/sw-core.js. GENERATED: change it in ../app-kit, then run "npm run sync:kit". ----

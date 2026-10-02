@@ -11,6 +11,7 @@ import { routineDetail, runningSchedules, scheduleText, endedOn, routineOrder } 
 import { removedSection } from './removed.js';
 import { systemSection } from './system.js';
 import { householdSection } from './household.js';
+import { accountSection } from './account.js';
 
 /**
  * The More screen: review and sources, printing, routines (list, add, change, end), school
@@ -65,5 +66,6 @@ export function moreView(ctx, data, nav) {
     data.removed ? removedSection(ctx, data.removed) : '',
     householdSection(ctx),
     systemSection(ctx),
+    accountSection(),
     el('p', { class: 'muted small version' }, `Family Cal · version ${VERSION}`));
 }

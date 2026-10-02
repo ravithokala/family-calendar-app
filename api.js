@@ -63,6 +63,10 @@ async function post(body, timeoutMs) {
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify(body),
       redirect: 'follow',
+      // Nothing of the browser's goes with it: no cookies, no cached answer, no referrer.
+      credentials: 'omit',
+      cache: 'no-store',
+      referrerPolicy: 'no-referrer',
       signal: abort.signal,
     });
     text = await response.text();
@@ -117,6 +121,8 @@ export async function call(action, payload = {}, options = {}) {
   const timeoutMs = options.timeoutMs ?? waitFor(action);
   for (let attempt = 0; attempt < 2; attempt++) {
     const result = await post({ session: await sessionKey(), action, payload }, timeoutMs);
+    // An account that is no longer allowed: its key is of no use, so it does not stay on this phone.
+    if (!result.ok && result.errors[0]?.code === 'FORBIDDEN') forgetSession();
     if (result.ok || result.errors[0]?.code !== 'UNAUTHENTICATED' || attempt === 1) return result;
     forgetSession();
   }
@@ -128,4 +134,17 @@ export async function signOut() {
   const key = session();
   forgetSession();
   if (key) await post({ session: key, action: 'auth.end' }, SIGN_IN_WAIT_MS).catch(() => { /* offline: the key is gone here anyway */ });
+}
+
+/**
+ * Signs out every device of this account (a lost phone), this one included. Needs a connection:
+ * unlike signing out here, it is no use unless the server did it.
+ * @returns {Promise<ApiResponse>}
+ */
+export async function signOutEverywhere() {
+  const key = session();
+  if (!key) throw new Unreachable('Signed out already', false);
+  const result = await post({ session: key, action: 'auth.end_all' }, SIGN_IN_WAIT_MS);
+  if (result.ok || result.errors[0]?.code === 'UNAUTHENTICATED') forgetSession();
+  return result;
 }
