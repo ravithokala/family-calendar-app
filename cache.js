@@ -1,5 +1,7 @@
 // @ts-check
 
+import { copyTooOld } from './freshness.js';
+
 /**
  * The last answer for each screen, kept on this phone so a screen draws at once and refreshes
  * behind it (ADR-078). Cleared on sign-out. Never shared: it is this device's own storage.
@@ -12,9 +14,15 @@ const FORMAT = 4;
 const ROOT = 'fc.cache.';
 const PREFIX = `${ROOT}v${FORMAT}.`;
 
-// Remove copies saved in any older format.
+// Remove copies saved in any older format, and copies not refreshed for 30 days (ADR-105): they are
+// removed, not shown; the session has ended by then too.
 try {
   Object.keys(localStorage).filter((k) => k.startsWith(ROOT) && !k.startsWith(PREFIX)).forEach((k) => localStorage.removeItem(k));
+  for (const k of Object.keys(localStorage).filter((key) => key.startsWith(PREFIX))) {
+    let at = 0;
+    try { at = JSON.parse(localStorage.getItem(k) ?? '{}').at ?? 0; } catch (e) { /* unreadable: removed */ }
+    if (copyTooOld(at, Date.now())) localStorage.removeItem(k);
+  }
 } catch (e) { /* storage unavailable */ }
 /** Enough for a few months, weeks and days either way; the oldest go first. */
 const KEEP = 20;

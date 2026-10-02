@@ -2,11 +2,12 @@
 
 import { CONFIG } from './config.js';
 import { init, session } from './auth.js';
-import { call, sessionKey } from './api.js';
+import { call, sessionKey, onSessionEnded } from './api.js';
 import { el } from './dom.js';
 import * as cache from './cache.js';
 import { VERSION } from './version.js';
 import { watchForUpdates } from './update.js';
+import { inFrame, FRAMED_MESSAGE } from './guard.js';
 import { printSheet } from './views/print.js';
 import { formContext } from './app/context.js';
 import { showCalendar } from './app/calendar.js';
@@ -74,6 +75,11 @@ async function loadMeta() {
 }
 
 async function start() {
+  // GitHub Pages cannot forbid framing: refuse to run inside another page (ADR-105; app-kit's guard.js).
+  if (inFrame()) { showError(FRAMED_MESSAGE); return; }
+  // When the server ends this phone's session (expired, "sign out all devices" elsewhere, or the account no
+  // longer allowed), the saved answers go too, and the app starts again at sign-in (ADR-105).
+  onSessionEnded(() => { cache.clear(); window.location.reload(); });
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => { /* works without it */ });
   // The app opens from its saved copy; a newer published version reloads the page into it (ADR-102),
   // never over an open form. "Tap to refresh" checks too.

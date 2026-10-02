@@ -37,3 +37,16 @@ export function loadTimeText(timing, what = '') {
   const server = timing.server_ms === null ? '' : ` · server ${s(timing.server_ms)}${parts ? ` (${parts})` : ''}`;
   return `${what ? `${what}: l` : 'L'}ast load ${s(timing.total_ms)}${server}`;
 }
+
+/**
+ * A saved copy of the data older than this is not shown: it is removed when the app opens (as the
+ * session itself ends after 30 days without use). A phone left in a drawer shows nothing stale.
+ */
+export const COPY_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+
+/**
+ * Whether a saved copy is too old to show.
+ * @param {number|null|undefined} savedAt  when it came from the server (ms since 1970)
+ * @param {number} now
+ */
+export const copyTooOld = (savedAt, now) => typeof savedAt === 'number' && now - savedAt > COPY_MAX_AGE_MS;

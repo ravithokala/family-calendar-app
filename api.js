@@ -44,6 +44,25 @@ const post = (body, timeoutMs) => sendRequest(CONFIG.apiUrl, body, timeoutMs);
 /** @param {ApiResponse} r */
 const reason = (r) => r.errors.map((e) => e.message).join('; ');
 
+/** @type {Array<() => void|Promise<void>>} */
+const whenEnded = [];
+/**
+ * Called when the server says this phone's session has ended (expired, ended from another device
+ * with "sign out all devices", or the account no longer allowed), after the key is forgotten and
+ * before anything else: the app removes its saved copy of the data, so a phone that is no longer
+ * signed in shows nothing. Not called by signing out here, which the app does itself.
+ * @param {() => void|Promise<void>} listener
+ */
+export function onSessionEnded(listener) {
+  whenEnded.push(listener);
+}
+
+/** The key is of no use any more: it does not stay on this phone, and nor does the saved data. */
+async function sessionEnded() {
+  forgetSession();
+  for (const listener of whenEnded) await listener();
+}
+
 /**
  * This phone's session key, signing in with Google first if there is none.
  * @returns {Promise<string>}
@@ -73,9 +92,10 @@ async function once(action, payload, timeoutMs, requestId) {
     const body = { session: await sessionKey(), action, payload };
     const result = await post(requestId ? { ...body, request_id: requestId } : body, timeoutMs);
     // An account that is no longer allowed: its key is of no use, so it does not stay on this phone.
-    if (!result.ok && result.errors[0]?.code === 'FORBIDDEN') forgetSession();
-    if (result.ok || result.errors[0]?.code !== 'UNAUTHENTICATED' || attempt === 1) return result;
-    forgetSession();
+    if (!result.ok && result.errors[0]?.code === 'FORBIDDEN') await sessionEnded();
+    if (result.ok || result.errors[0]?.code !== 'UNAUTHENTICATED') return result;
+    await sessionEnded();
+    if (attempt === 1) return result;
   }
   throw new Error('unreachable');
 }
