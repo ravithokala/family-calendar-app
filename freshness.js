@@ -11,7 +11,7 @@
  * @param {number} now
  * @returns {{ short: string, label: string }}
  */
-export function updatedText(status, now) {
+function updatedText(status, now) {
   if (status.refreshing) return { short: 'Updating…', label: 'Updating from the sheet' };
   const action = status.online ? 'tap to refresh' : 'offline';
   if (status.lastSynced === null) return { short: 'Not updated', label: `Not updated yet · ${action}` };
@@ -30,7 +30,7 @@ export function updatedText(status, now) {
  * @param {string} [what]  what was loaded, when an app times more than one thing ("Calendar")
  * @returns {string}
  */
-export function loadTimeText(timing, what = '') {
+function loadTimeText(timing, what = '') {
   if (!timing || typeof timing.total_ms !== 'number') return '';
   const s = (/** @type {number} */ ms) => `${(ms / 1000).toFixed(1)} s`;
   const parts = [timing.setup_ms === null ? '' : `set-up ${s(timing.setup_ms)}`, timing.served ?? ''].filter(Boolean).join(', ');
@@ -42,11 +42,14 @@ export function loadTimeText(timing, what = '') {
  * A saved copy of the data older than this is not shown: it is removed when the app opens (as the
  * session itself ends after 30 days without use). A phone left in a drawer shows nothing stale.
  */
-export const COPY_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+const COPY_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 
 /**
  * Whether a saved copy is too old to show.
  * @param {number|null|undefined} savedAt  when it came from the server (ms since 1970)
  * @param {number} now
  */
-export const copyTooOld = (savedAt, now) => typeof savedAt === 'number' && now - savedAt > COPY_MAX_AGE_MS;
+const copyTooOld = (savedAt, now) => typeof savedAt === 'number' && now - savedAt > COPY_MAX_AGE_MS;
+
+// Only this list: the portfolio's offline tests run this file as a plain script.
+export { updatedText, loadTimeText, COPY_MAX_AGE_MS, copyTooOld };
