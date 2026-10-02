@@ -2,10 +2,9 @@
 // GENERATED from app-kit/pwa/request.js. Do not edit here: change it in ../app-kit, then run "node ../app-kit/sync.js" in this app.
 
 /**
- * Sending one request to an app's server (Apps Script), whatever the app's own protocol: the
- * plain-text POST, how long to wait, and telling "this phone has no connection" from "the server
- * did not answer". What the answer means is the caller's business (api.js for the calendar and
- * Household; the Property Portfolio's own api.js).
+ * Sending one request to an app's server (Apps Script): the plain-text POST, how long to wait,
+ * and telling "this phone has no connection" from "the server did not answer". What the answer
+ * means is the caller's business (api.js: the apps' protocol).
  * Only `export { … }` at the end: the portfolio's offline tests run this file as a plain script.
  */
 

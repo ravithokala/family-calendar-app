@@ -6,7 +6,25 @@ import { el } from '../dom.js';
 import { moreView } from '../views/more.js';
 import { reviewView } from '../views/review.js';
 import { formContext } from './context.js';
-import { $, go, today, FRESH_MS, isCurrent, showUpdated, showUpdating, showFetched, drawSaved, showError, showPending } from './state.js';
+import { $, go, today, FRESH_MS, isCurrent, clock, showUpdated, showUpdating, showFetched, drawSaved, showError, showPending } from './state.js';
+
+/**
+ * A refresh that failed: the saved copy stays on screen with a note above it, as on Month; only
+ * with nothing saved is the screen the message alone (RT, 2026-10-03: More went blank offline).
+ * @param {unknown} e
+ * @param {{ at: number } | null} saved
+ * @param {HTMLElement|null} savedView
+ */
+function refreshFailed(e, saved, savedView) {
+  const reason = e instanceof Error ? e.message : String(e);
+  if (saved && savedView) {
+    $('main').replaceChildren(el('div', { class: 'msg warning' }, `Could not refresh: ${reason}. Showing ${clock(saved.at)}.`), savedView);
+    showUpdated(saved.at);
+  } else {
+    showError(`Could not load: ${reason}`);
+    showUpdated(null);
+  }
+}
 
 /**
  * The More screen (saved copy first, as with the calendar), from one request (RT, 2026-09-25:
@@ -38,8 +56,7 @@ export async function showMore(mine, force = false, fresh = false) {
     $('main').replaceChildren(draw(r.data));
   } catch (e) {
     if (!isCurrent(mine)) return;
-    showError(`Could not load: ${e instanceof Error ? e.message : String(e)}`);
-    showUpdated(saved?.at ?? null);
+    refreshFailed(e, saved, savedView);
   }
 }
 
@@ -64,7 +81,6 @@ export async function showReview(mine) {
     showFetched('Review');
   } catch (e) {
     if (!isCurrent(mine)) return;
-    showError(`Could not load: ${e instanceof Error ? e.message : String(e)}`);
-    showUpdated(saved?.at ?? null);
+    refreshFailed(e, saved, savedView);
   }
 }
