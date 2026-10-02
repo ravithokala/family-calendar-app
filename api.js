@@ -7,7 +7,7 @@ import { sendRequest, Unreachable, lastTiming } from './request.js';
 
 /**
  * Talking to the app's server (Apps Script). What differs between apps is in config.js: the
- * address, and how long each kind of request waits (CONFIG.waits).
+ * address, and which actions only read or are slow by nature (CONFIG.waits); the rest are saves.
  *
  * @typedef {{ field: string, code: string, message: string }} Issue
  * @typedef {{ ok: boolean, data: any, errors: Issue[], warnings: Issue[], server_ms?: number, setup_ms?: number, served?: string }} ApiResponse
@@ -21,9 +21,17 @@ import { sendRequest, Unreachable, lastTiming } from './request.js';
 export const READ_WAIT_MS = 20000;
 /** How long signing in and out wait. */
 const SIGN_IN_WAIT_MS = 45000;
-
-/** How long this action waits unless the caller says otherwise; 0 is however long it takes. @param {string} action */
-const waitFor = (action) => (CONFIG.waits.reads.includes(action) ? READ_WAIT_MS : CONFIG.waits.other);
+/**
+ * Saving (every action that is neither a read nor slow). A normal save takes 1 to 4 seconds. The
+ * first try waits a short time, because just after a connection returns a save often arrives but
+ * its answer does not; the one automatic retry then gets the answer. The retry is safe: both
+ * carry the same request_id, and the server applies a save once (infra/replays.js).
+ */
+export const SAVE_WAIT_MS = 12000;
+export const SAVE_RETRY_WAIT_MS = 25000;
+const SAVE_RETRY_PAUSE_MS = 2000;
+/** Actions that take long by nature (making PDFs, reading an upload, restoring a backup): one try. */
+export const SLOW_WAIT_MS = 180000;
 
 /**
  * One request to this app's server (request.js does the sending).
@@ -52,23 +60,73 @@ export async function sessionKey() {
 }
 
 /**
- * Calls the server. An expired or revoked session is dropped and the call retried once after
- * signing in again.
+ * One request with this phone's session. An expired or revoked session is dropped and the
+ * request sent once more after signing in again.
  * @param {string} action
- * @param {unknown} [payload]
- * @param {{ timeoutMs?: number }} [options]  how long to wait for the answer, instead of CONFIG.waits
+ * @param {unknown} payload
+ * @param {number} timeoutMs
+ * @param {string} [requestId]  for a save: the server applies one id once
  * @returns {Promise<ApiResponse>}
  */
-export async function call(action, payload = {}, options = {}) {
-  const timeoutMs = options.timeoutMs ?? waitFor(action);
+async function once(action, payload, timeoutMs, requestId) {
   for (let attempt = 0; attempt < 2; attempt++) {
-    const result = await post({ session: await sessionKey(), action, payload }, timeoutMs);
+    const body = { session: await sessionKey(), action, payload };
+    const result = await post(requestId ? { ...body, request_id: requestId } : body, timeoutMs);
     // An account that is no longer allowed: its key is of no use, so it does not stay on this phone.
     if (!result.ok && result.errors[0]?.code === 'FORBIDDEN') forgetSession();
     if (result.ok || result.errors[0]?.code !== 'UNAUTHENTICATED' || attempt === 1) return result;
     forgetSession();
   }
   throw new Error('unreachable');
+}
+
+/**
+ * Calls the server. What kind of action it is (config.js, CONFIG.waits) decides how:
+ * - a read gives up after 20 seconds: the saved copy is on screen;
+ * - a slow action gets one long try;
+ * - anything else is a save: an id, a short first try, and one automatic retry with the same id
+ *   if no answer came (never when the phone itself has no connection). Whatever happens to the
+ *   answers, the server applies it once.
+ * @param {string} action
+ * @param {unknown} [payload]
+ * @param {{ timeoutMs?: number, requestId?: string }} [options]  timeoutMs: one try with this wait,
+ *   instead of the above; requestId: the save's id, when the app wants a second tap on the same
+ *   form to count as the same save
+ * @returns {Promise<ApiResponse>}
+ */
+export async function call(action, payload = {}, options = {}) {
+  if (options.timeoutMs !== undefined) return once(action, payload, options.timeoutMs, options.requestId);
+  if (CONFIG.waits.reads.includes(action)) return once(action, payload, READ_WAIT_MS);
+  const requestId = options.requestId ?? crypto.randomUUID();
+  if (CONFIG.waits.slow.includes(action)) return once(action, payload, SLOW_WAIT_MS, requestId);
+  try {
+    return await once(action, payload, SAVE_WAIT_MS, requestId);
+  } catch (first) {
+    if (!(first instanceof Unreachable) || first.offline) throw first;
+    await new Promise((resolve) => setTimeout(resolve, SAVE_RETRY_PAUSE_MS));
+    return once(action, payload, SAVE_RETRY_WAIT_MS, requestId);
+  }
+}
+
+/**
+ * As call(), but always answers: a request that got no answer comes back as a refusal the screen
+ * can show like any other, instead of an error to catch. For forms, whose saves could otherwise
+ * fail without a word.
+ * @param {string} action
+ * @param {unknown} [payload]
+ * @param {{ timeoutMs?: number, requestId?: string }} [options]
+ * @returns {Promise<ApiResponse>}
+ */
+export async function ask(action, payload = {}, options = {}) {
+  try {
+    return await call(action, payload, options);
+  } catch (e) {
+    const offline = e instanceof Unreachable && e.offline;
+    // After two tries with no answer a save may still have arrived: say so, rather than "try again".
+    const message = offline ? "You're offline: connect, then try again."
+      : `${e instanceof Error ? e.message : String(e)}. If this was a change, check whether it was saved before trying again.`;
+    return { ok: false, data: null, errors: [{ field: 'request', code: offline ? 'OFFLINE' : 'NO_ANSWER', message }], warnings: [] };
+  }
 }
 
 /** Ends this phone's session on the server (best effort) and forgets it here. */

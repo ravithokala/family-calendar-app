@@ -1,6 +1,6 @@
 // @ts-check
 
-import { call } from '../api.js';
+import { call, ask } from '../api.js';
 import * as cache from '../cache.js';
 import { el, addDays, addMonths, niceDate, monthTitle } from '../dom.js';
 import { printSheet } from '../views/print.js';
@@ -43,14 +43,14 @@ function draw(s, all) {
   // A struck-through cancelled session opens its Day, where it can be restored.
   const onItem = (date) => (/** @type {import('../views/parts.js').AppItem} */ item) => (item.struck ? openDay(date) : eventDetails(ctx, t, item, date));
   const onRestore = async (/** @type {import('../views/parts.js').CancelledItem} */ c, /** @type {HTMLButtonElement} */ button) => {
-    const r = await busy(button, () => call('events.restore', { event_id: c.event_id }));
+    const r = await busy(button, () => ask('events.restore', { event_id: c.event_id }));
     if (r.ok) ctx.saved(`Restored "${c.title}".`, r);
     else toast(r.errors.map((e) => e.message).join('; '));
   };
   const todoActions = {
     open: (/** @type {string} */ listId) => go({ screen: 'lists', list: listId }),
     tick: async (/** @type {import('../views/parts.js').Todo} */ todo, /** @type {HTMLButtonElement} */ button) => {
-      const r = await busy(button, () => call('listItems.setStatus', { item_id: todo.item_id, status: 'DONE' }));
+      const r = await busy(button, () => ask('listItems.setStatus', { item_id: todo.item_id, status: 'DONE' }));
       if (!r.ok) { toast(r.errors.map((e) => e.message).join('; ')); return; }
       // Only the to-dos changed: keep the saved calendar on screen while it refreshes.
       cache.staleCalendar();

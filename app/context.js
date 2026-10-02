@@ -1,6 +1,6 @@
 // @ts-check
 
-import { call } from '../api.js';
+import { ask } from '../api.js';
 import * as cache from '../cache.js';
 import { toast } from '../views/sheet.js';
 import { app, go } from './state.js';
@@ -12,7 +12,8 @@ import { app, go } from './state.js';
  */
 export const formContext = () => ({
   meta: app.meta,
-  call,
+  // Always answers (ADR-104): a save that gets no answer comes back as a refusal the form shows, not an error.
+  call: ask,
   openList: (/** @type {string} */ listId) => go({ screen: 'lists', list: listId }),
   saved: (message, r, undo) => {
     // Saved copies stay on screen while they refresh, instead of a first-time "Loading…" (RT, 2026-09-25).

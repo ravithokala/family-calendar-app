@@ -12,11 +12,15 @@ export const CONFIG = Object.freeze({
   /** Prefix of this app's localStorage keys: the three apps share one origin (github.io). */
   storage: 'fc',
   /**
-   * How long a request waits for its answer (app-kit's api.js). `reads` only read: they give up
-   * after 20 seconds, and the saved copy is shown with a clear message (connected but with no
-   * internet, a request never fails, it hangs: RT, 2026-10-03). Everything else (other: 0) is
-   * waited for however long it takes: the server may still finish a save, and trying again would
-   * save it twice.
+   * What kind each action is (app-kit's api.js, ADR-104). `reads` only read: they give up after 20
+   * seconds, and the saved copy is shown with a clear message (connected but with no internet, a
+   * request never fails, it hangs: RT, 2026-10-03). `slow` take long by nature (making the PDFs,
+   * reading an uploaded PDF, reading Household Admin's sheet): one try of three minutes. Everything
+   * else is a save: an id, 12 seconds, then one automatic retry with the same id, which the server
+   * applies once.
    */
-  waits: Object.freeze({ reads: Object.freeze(['app.days', 'app.more', 'app.search', 'lists.all', 'meta.get', 'review.inbox']), other: 0 }),
+  waits: Object.freeze({
+    reads: Object.freeze(['app.days', 'app.more', 'app.search', 'lists.all', 'meta.get', 'review.inbox', 'system.check', 'sources.prompt', 'capture.parse']),
+    slow: Object.freeze(['print.generateMonth', 'sources.addPdf', 'household.sync']),
+  }),
 });
