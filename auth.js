@@ -6,6 +6,7 @@
  * starts an app session on the server, whose key this phone keeps in localStorage. The session
  * lasts 30 days from its last use, so a phone in use stays signed in.
  * The apps share one origin (github.io), so each keeps its keys under its own prefix (CONFIG.storage).
+ * Only `export { … }` at the end: the portfolio's offline tests run this file as a plain script.
  */
 
 import { CONFIG } from './config.js';
@@ -20,11 +21,13 @@ import { CONFIG } from './config.js';
  * } } }} GoogleIdentity
  */
 
-const SESSION = `${CONFIG.storage}.session`;
-const USER = `${CONFIG.storage}.user`;
+/** Where this phone keeps its session key, and (for apps that name their users) who it is. */
+const SESSION_KEY = `${CONFIG.storage}.session`;
+const USER_KEY = `${CONFIG.storage}.user`;
 
 /** @type {Array<(token: string) => void>} */
 let waiting = [];
+/** Google's sign-in has loaded and been set up for this app. */
 let ready = false;
 /** Google's sign-in did not load (the app was opened with no connection). */
 let failed = false;
@@ -38,53 +41,58 @@ function get(key) {
 }
 
 /** The app session key, if this phone is signed in. Anything that is not a key counts as signed out. */
-export const session = () => {
-  const key = get(SESSION);
+const session = () => {
+  const key = get(SESSION_KEY);
   return key !== null && /^[0-9a-f]{64}$/.test(key) ? key : null;
 };
 
-/** The application user (e.g. RT). */
-export const user = () => get(USER);
+/** The application user (e.g. RT), in apps that name their users. */
+const user = () => get(USER_KEY);
 
-/** @param {string} key @param {string} who */
-export function saveSession(key, who) {
+/** @param {string} key @param {string} [who]  the application user, if the app names its users */
+function saveSession(key, who) {
   try {
-    localStorage.setItem(SESSION, key);
-    localStorage.setItem(USER, who);
+    localStorage.setItem(SESSION_KEY, key);
+    if (who) localStorage.setItem(USER_KEY, who);
   } catch (e) { /* storage unavailable: the phone will just sign in again */ }
 }
 
-export function forgetSession() {
+function forgetSession() {
   try {
-    localStorage.removeItem(SESSION);
-    localStorage.removeItem(USER);
+    localStorage.removeItem(SESSION_KEY);
+    localStorage.removeItem(USER_KEY);
   } catch (e) { /* ignore */ }
 }
 
 /**
- * Sets up Google sign-in and draws its button into `buttonHost`.
+ * Sets up Google sign-in (once) and draws its button into `buttonHost`. Call it again to draw the
+ * button somewhere else, or with other words.
  * @param {string} clientId
  * @param {HTMLElement} buttonHost
+ * @param {'signin_with'|'continue_with'} [text]  the button's words: "Sign in with Google", or
+ *   "Continue with Google" where the account is being confirmed, not signed in
  */
-export async function init(clientId, buttonHost) {
+async function init(clientId, buttonHost, text = 'signin_with') {
   for (let i = 0; i < 100 && !gis()?.accounts?.id; i++) await new Promise((r) => setTimeout(r, 100));
   if (!gis()?.accounts?.id) {
     failed = true;
     throw new Error('Google sign-in did not load. Check the connection and reload.');
   }
-  gis().accounts.id.initialize({
-    client_id: clientId,
-    callback: (/** @type {CredentialResponse} */ response) => {
-      const resolve = waiting;
-      waiting = [];
-      resolve.forEach((fn) => fn(response.credential));
-    },
-    auto_select: true,
-    use_fedcm_for_prompt: true,
-    cancel_on_tap_outside: false,
-  });
-  gis().accounts.id.renderButton(buttonHost, { theme: 'outline', size: 'large', text: 'signin_with', shape: 'pill' });
-  ready = true;
+  if (!ready) {
+    gis().accounts.id.initialize({
+      client_id: clientId,
+      callback: (/** @type {CredentialResponse} */ response) => {
+        const resolve = waiting;
+        waiting = [];
+        resolve.forEach((fn) => fn(response.credential));
+      },
+      auto_select: true,
+      use_fedcm_for_prompt: true,
+      cancel_on_tap_outside: false,
+    });
+    ready = true;
+  }
+  gis().accounts.id.renderButton(buttonHost, { theme: 'outline', size: 'large', text, shape: 'pill' });
 }
 
 /**
@@ -93,22 +101,32 @@ export async function init(clientId, buttonHost) {
  * @param {number} [waitMs]
  * @returns {Promise<boolean>}
  */
-export async function signInReady(waitMs = 10000) {
+async function signInReady(waitMs = 10000) {
   for (let waited = 0; !ready && !failed && waited < waitMs; waited += 100) await new Promise((r) => setTimeout(r, 100));
   return ready;
 }
 
 /**
- * A fresh Google ID token, from the button or Google's prompt; used only to start a session.
+ * The next Google ID token, from the button or Google's prompt; used only to start (or confirm) a
+ * session. Google's prompt is shown for the first wait unless told not to: an app that keeps
+ * listening after a sign-in (for the button being tapped again) waits without prompting.
+ * @param {{ prompt?: boolean }} [options]
  * @returns {Promise<string>}
  */
-export function googleToken() {
+function googleToken(options = {}) {
   return new Promise((resolve) => {
     waiting.push(resolve);
-    if (ready && waiting.length === 1) gis().accounts.id.prompt();
+    if (options.prompt !== false && ready && waiting.length === 1) gis().accounts.id.prompt();
   });
 }
 
-export function signOutOfGoogle() {
+/** Shows Google's own prompt again (an app that draws its sign-in screen more than once). */
+function showPrompt() {
+  if (ready) gis().accounts.id.prompt();
+}
+
+function signOutOfGoogle() {
   gis()?.accounts?.id?.disableAutoSelect();
 }
+
+export { SESSION_KEY, session, user, saveSession, forgetSession, init, signInReady, googleToken, showPrompt, signOutOfGoogle };
