@@ -8,11 +8,15 @@ import { el } from '../dom.js';
  */
 
 /**
+ * A labelled control. A group of chips is not put inside a <label>: a label passes a tap on to its
+ * first button, so on iPhone choosing one person also toggled the first chip, RT (RT, 2026-10-02).
  * @param {string} label
  * @param {HTMLElement} control
  * @param {string} [cls]
  */
-export const field = (label, control, cls = '') => el('label', { class: `field ${cls}` }, el('span', {}, label), control);
+export const field = (label, control, cls = '') => (control.classList.contains('chips')
+  ? el('div', { class: `field ${cls}`, role: 'group', 'aria-label': label }, el('span', {}, label), control)
+  : el('label', { class: `field ${cls}` }, el('span', {}, label), control));
 
 /**
  * @param {string} type  text, date, time
@@ -52,15 +56,18 @@ export function chips(options, chosen, opts = {}) {
   const selected = new Set(chosen);
   /** @type {Array<() => void>} */
   const listeners = [];
-  const node = el('div', { class: 'chips' });
-  const draw = () => node.replaceChildren(...options.map((o) => el('button', {
-    type: 'button', 'aria-pressed': String(selected.has(o)),
+  // The buttons are made once and only their pressed state changes: replacing a button while it is
+  // being tapped confuses where the tap landed (iPhone).
+  const buttons = options.map((o) => el('button', {
+    type: 'button',
     onclick: () => {
       if (opts.single) { selected.clear(); selected.add(o); } else if (selected.has(o)) selected.delete(o); else selected.add(o);
       draw();
       listeners.forEach((fn) => fn());
     },
-  }, o)));
+  }, o));
+  const draw = () => buttons.forEach((b, i) => b.setAttribute('aria-pressed', String(selected.has(options[i]))));
+  const node = el('div', { class: 'chips' }, buttons);
   draw();
   return { node, get: () => options.filter((o) => selected.has(o)), onChange: (/** @type {() => void} */ fn) => listeners.push(fn) };
 }
