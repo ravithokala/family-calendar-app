@@ -1,6 +1,6 @@
 // @ts-check
 
-import { call, lastTiming } from '../api.js';
+import { call } from '../api.js';
 import * as cache from '../cache.js';
 import { el, addDays, addMonths, niceDate, monthTitle } from '../dom.js';
 import { printSheet } from '../views/print.js';
@@ -12,7 +12,7 @@ import { toast } from '../views/sheet.js';
 import { busy } from '../views/fields.js';
 import { formContext } from './context.js';
 import { acceptBackgroundLists } from './lists.js';
-import { $, app, go, today, FRESH_MS, isCurrent, clock, showUpdated, showUpdating, drawSaved, showError, showPending, routinesHidden } from './state.js';
+import { $, app, go, today, FRESH_MS, isCurrent, clock, showUpdated, showUpdating, showFetched, drawSaved, showError, showPending, routinesHidden } from './state.js';
 
 /**
  * The calendar screens: Today, Month (default), Week and Day, each for one filter (ADR-080). The
@@ -235,13 +235,9 @@ export async function showCalendar(mine, s, f, force, fresh) {
     showPending(r.data.pending);
     try { sessionStorage.removeItem('fc.reloaded'); } catch (e) { /* ignore */ }
     const shown = cache.covering(f.from, f.to);
-    // Where the server's time went (RT, 2026-09-26: a slow first open): set-up (session, workbook),
-    // and whether the answer came from its memory or was rebuilt.
-    const parts = [lastTiming.setup_ms === null ? '' : `set-up ${(lastTiming.setup_ms / 1000).toFixed(1)} s`, lastTiming.served ?? ''].filter(Boolean).join(', ');
-    const server = lastTiming.server_ms === null ? '' : ` · server ${(lastTiming.server_ms / 1000).toFixed(1)} s${parts ? ` (${parts})` : ''}`;
-    $('main').replaceChildren(draw(s, shown ? shown.data : r.data),
-      el('p', { class: 'status muted' }, `Loaded in ${(lastTiming.total_ms / 1000).toFixed(1)} s${server}`));
-    showUpdated(Date.now());
+    $('main').replaceChildren(draw(s, shown ? shown.data : r.data));
+    // The header says when; More keeps how long it took (RT, 2026-09-26: a slow first open).
+    showFetched('Calendar');
     prefetchAround(s.date).then(prefetchScreens);
   } catch (e) {
     if (!isCurrent(mine)) return;

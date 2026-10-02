@@ -6,7 +6,7 @@ import { el } from '../dom.js';
 import { listsOverview, listDetail, listSheet, isUnsaved, hasPendingSaves } from '../views/lists.js';
 import { toast } from '../views/sheet.js';
 import { formContext } from './context.js';
-import { $, app, go, readState, today, isCurrent, drawSaved, showError, showUpdated, showUpdating } from './state.js';
+import { $, app, go, readState, today, isCurrent, drawSaved, showError, showUpdated, showUpdating, showFetched } from './state.js';
 
 /**
  * The copy of the lists in memory: one for every visit to Lists, so saves still running from an
@@ -40,7 +40,7 @@ let fetchedAt = 0;
 /** Keeps the header's time current when a check finds nothing new (no redraw). */
 function markFetched() {
   fetchedAt = Date.now();
-  showUpdated(fetchedAt);
+  showFetched('Lists');
 }
 
 /** Whether a new list or item is still being saved. */

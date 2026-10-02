@@ -6,7 +6,7 @@ import { el } from '../dom.js';
 import { moreView } from '../views/more.js';
 import { reviewView } from '../views/review.js';
 import { formContext } from './context.js';
-import { $, go, today, FRESH_MS, isCurrent, showUpdated, showUpdating, drawSaved, showError, showPending } from './state.js';
+import { $, go, today, FRESH_MS, isCurrent, showUpdated, showUpdating, showFetched, drawSaved, showError, showPending } from './state.js';
 
 /**
  * The More screen (saved copy first, as with the calendar), from one request (RT, 2026-09-25:
@@ -33,8 +33,9 @@ export async function showMore(mine, force = false, fresh = false) {
     if (!r.ok) throw new Error(r.errors.map((e) => e.message).join('; '));
     showPending(r.data.pending);
     cache.write('more', r.data);
+    // Timed before drawing: More itself shows the load times.
+    showFetched('More');
     $('main').replaceChildren(draw(r.data));
-    showUpdated(Date.now());
   } catch (e) {
     if (!isCurrent(mine)) return;
     showError(`Could not load: ${e instanceof Error ? e.message : String(e)}`);
@@ -60,7 +61,7 @@ export async function showReview(mine) {
     cache.write('review', r.data);
     showPending(r.data.count);
     $('main').replaceChildren(draw(r.data));
-    showUpdated(Date.now());
+    showFetched('Review');
   } catch (e) {
     if (!isCurrent(mine)) return;
     showError(`Could not load: ${e instanceof Error ? e.message : String(e)}`);

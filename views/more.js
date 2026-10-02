@@ -12,6 +12,8 @@ import { removedSection } from './removed.js';
 import { systemSection } from './system.js';
 import { householdSection } from './household.js';
 import { accountSection } from './account.js';
+import { loadTimeText } from '../freshness.js';
+import { loadTimes } from '../app/state.js';
 
 /**
  * The More screen: review and sources, printing, routines (list, add, change, end), school
@@ -67,5 +69,7 @@ export function moreView(ctx, data, nav) {
     householdSection(ctx),
     systemSection(ctx),
     accountSection(),
-    el('p', { class: 'muted small version' }, `Family Cal · version ${VERSION}`));
+    // Where a slow open spends its time (ADR-103): the last load of each kind of screen this visit.
+    el('p', { class: 'muted small version' }, `Family Cal · version ${VERSION}`,
+      ['Calendar', 'Lists', 'More', 'Review'].filter((what) => loadTimes[what]).map((what) => el('span', { class: 'load-time' }, loadTimeText(loadTimes[what], what)))));
 }

@@ -136,6 +136,7 @@ button:disabled { opacity: 0.6; }
 #toast .toast-row { display: flex; align-items: center; gap: 12px; justify-content: space-between; }
 #toast .undo { flex: none; background: transparent; color: var(--bg); border: 1px solid var(--bg); border-radius: 8px; padding: 6px 14px; font: inherit; font-weight: 700; cursor: pointer; }
 .version { margin-top: 28px; text-align: center; }
+.load-time { display: block; margin-top: 2px; font-variant-numeric: tabular-nums; }
 
 /* Review, sources and printing (ADR-082) */
 .badge { border: 0; cursor: pointer; }

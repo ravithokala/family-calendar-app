@@ -3,6 +3,7 @@
 import { el, isoDate, addDays, addMonths, mondayOf, niceDate, longDate, monthTitle } from '../dom.js';
 import { monthRange } from '../views/month.js';
 import { updatedText } from '../freshness.js';
+import { lastTiming } from '../api.js';
 
 /**
  * What every part of the app shares: the settings loaded from the server, where the app is (the
@@ -114,6 +115,22 @@ export function showUpdated(at, refreshing = false) {
   $('updated').textContent = text.short;
   $('refresh').setAttribute('aria-label', text.label);
   $('refresh').title = text.label;
+}
+
+/**
+ * How long each kind of screen last took to load, for the lines beside the version in More
+ * (ADR-103): where a slow open spends its time.
+ * @type {Record<string, typeof lastTiming>}
+ */
+export const loadTimes = {};
+
+/**
+ * A screen's data has just come from the server: the header shows now, and its load time is kept.
+ * @param {string} what  the kind of screen, as More names it ("Calendar", "Lists", "More", "Review")
+ */
+export function showFetched(what) {
+  loadTimes[what] = { ...lastTiming };
+  showUpdated(Date.now());
 }
 
 /** The header shows a fetch is on its way. */
