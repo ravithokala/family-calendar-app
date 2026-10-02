@@ -5,6 +5,8 @@ import { init, session } from './auth.js';
 import { call, sessionKey } from './api.js';
 import { el } from './dom.js';
 import * as cache from './cache.js';
+import { VERSION } from './version.js';
+import { watchForUpdates } from './update.js';
 import { printSheet } from './views/print.js';
 import { formContext } from './app/context.js';
 import { showCalendar } from './app/calendar.js';
@@ -73,6 +75,9 @@ async function loadMeta() {
 
 async function start() {
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => { /* works without it */ });
+  // The app opens from its saved copy; a newer published version reloads the page into it (ADR-102),
+  // never over an open form. "Tap to refresh" checks too.
+  app.checkForUpdate = watchForUpdates({ running: VERSION, busy: () => Boolean(document.querySelector('dialog[open]')) });
   if (!CONFIG.apiUrl || !CONFIG.clientId) {
     showError('This app is not configured yet (config.js).');
     return;

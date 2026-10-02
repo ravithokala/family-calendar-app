@@ -1,5 +1,5 @@
 // @ts-check
-// GENERATED from app-kit/pwa/api.js. Do not edit here: change it in ../app-kit, then run "npm run sync:kit".
+// GENERATED from app-kit/pwa/api.js. Do not edit here: change it in ../app-kit, then run "node ../app-kit/sync.js" in this app.
 
 import { CONFIG } from './config.js';
 import { session, saveSession, forgetSession, googleToken, signInReady } from './auth.js';

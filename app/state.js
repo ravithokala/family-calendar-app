@@ -25,10 +25,11 @@ const VIEW_KEY = 'fc.view';
 /**
  * The theme, filters and vocabularies from the server (ADR-080), and the router, which app.js
  * fills in: screens redraw through it without importing it.
+ * checkForUpdate looks for a newer version of the app now (set at start-up: update.js, ADR-102).
  * @type {{ theme: import('../views/parts.js').Theme|null, views: string[], meta: any,
- *   show: (force?: boolean, fresh?: boolean) => Promise<void> }}
+ *   show: (force?: boolean, fresh?: boolean) => Promise<void>, checkForUpdate: (force?: boolean) => Promise<boolean> }}
  */
-export const app = { theme: null, views: ['FAMILY'], meta: null, show: async () => {} };
+export const app = { theme: null, views: ['FAMILY'], meta: null, show: async () => {}, checkForUpdate: async () => false };
 
 export const today = () => isoDate(new Date());
 
@@ -102,10 +103,10 @@ export const clock = (at) => new Date(at).toLocaleTimeString('en-GB', { hour: '2
 
 /**
  * The "Updated …" line; tapping it refreshes now, and asks the server to rebuild too rather than
- * use its saved answer (ADR-088).
+ * use its saved answer (ADR-088). It also checks for a newer version of the app (ADR-102).
  * @param {string} text
  */
-export const refreshLink = (text) => el('p', { class: 'status muted', onclick: () => app.show(true, true) }, `${text} · tap to refresh`);
+export const refreshLink = (text) => el('p', { class: 'status muted', onclick: () => { app.checkForUpdate(true); app.show(true, true); } }, `${text} · tap to refresh`);
 
 /** @param {string} message */
 export function showError(message) {

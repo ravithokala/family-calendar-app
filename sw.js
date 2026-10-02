@@ -1,18 +1,32 @@
 // @ts-check
 
 /**
- * Caches the app shell only (ADR-078): no calendar data is ever cached here. Requests to other
- * sites (the API, Google sign-in) are left to the network.
- * Only VERSION and SHELL are this app's own: the logic below the marker line comes from app-kit (ADR-100).
+ * Saves the app's own files, so the app opens at once and with no connection (ADR-078, ADR-102).
+ * No calendar data is ever saved here. Requests to other sites (the API, Google sign-in) are left
+ * to the network.
+ * Only this top part is the app's own; the logic below the marker line comes from app-kit (ADR-100).
+ * - VERSION: leave as it is. Publishing (scripts/deploy-pwa.sh) replaces it in the published copy
+ *   with the commit and a hash of every file, so any change is a new release.
+ * - SHELL: every file of the app (tests/pwa.test.js checks it).
+ * - LEGACY: the names this app's saved copies had before they were named by its path.
  */
-const VERSION = 'shell-v63';
-const SHELL = ['./', 'index.html', 'app.js', 'app/state.js', 'app/context.js', 'app/calendar.js', 'app/lists.js', 'app/more.js', 'app/chrome.js', 'api.js', 'auth.js', 'cache.js', 'config.js', 'version.js', 'dom.js', 'views/parts.js', 'views/month.js', 'views/forms.js', 'views/fields.js', 'views/sheet.js', 'views/more.js', 'views/review.js', 'views/sources.js', 'views/print.js', 'views/capture.js', 'views/schools.js', 'views/lists.js', 'views/routines.js', 'views/removed.js', 'views/reminders.js', 'views/search.js', 'views/system.js', 'views/household.js', 'views/account.js', 'styles.css',
+const VERSION = 'shell-4c690a2-fe6aac4e06b7';
+const SHELL = ['./', 'index.html', 'app.js', 'app/state.js', 'app/context.js', 'app/calendar.js', 'app/lists.js', 'app/more.js', 'app/chrome.js', 'api.js', 'auth.js', 'update.js', 'cache.js', 'config.js', 'version.js', 'dom.js', 'views/parts.js', 'views/month.js', 'views/forms.js', 'views/fields.js', 'views/sheet.js', 'views/more.js', 'views/review.js', 'views/sources.js', 'views/print.js', 'views/capture.js', 'views/schools.js', 'views/lists.js', 'views/routines.js', 'views/removed.js', 'views/reminders.js', 'views/search.js', 'views/system.js', 'views/household.js', 'views/account.js', 'styles.css',
   'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png', 'icons/apple-touch-icon.png'];
+const LEGACY = /^shell-v\d+$/;
 
-// ---- Below this line: app-kit/pwa/sw-core.js. GENERATED: change it in ../app-kit, then run "npm run sync:kit". ----
+// ---- Below this line: app-kit/pwa/sw-core.js. GENERATED: change it in ../app-kit, then run "node ../app-kit/sync.js" in this app. ----
 
 // The service worker's logic, the same in every app. Each app's pwa/sw.js starts with its own
-// VERSION and SHELL (the files to save), then this, below the marker line.
+// VERSION, SHELL (the files to save) and LEGACY, then this, below the marker line.
+//
+// A release opens from its own saved copy, filled completely when this worker installs, so the app
+// starts at once: with no connection, and also when connected with no internet behind it (mobile
+// data used up), where a request would hang rather than fail. It does not wait for the site on
+// every open. Only the release check (version.js with a query) goes to the network: it is how the
+// page notices a newer release, which installs a new worker and a new saved copy before the page
+// reloads (pwa/update.js, or the app's own code). The data is never saved here.
+// The design is the Property Portfolio's (2026-09), used by all three apps since 2026-10-02.
 
 /**
  * The worker's global scope. Typed loosely: the DOM and WebWorker type libraries cannot be combined.
@@ -22,114 +36,88 @@ const sw = self;
 
 /**
  * This app's saved copy. The apps share one origin (github.io), and so one cache storage: each
- * app's caches are named by its own path ("/household-admin-app/shell-v16"), and an app only ever
- * deletes its own. Until 2026-10-02 every app's worker deleted every cache but its own current
- * one, so updating one app removed the other apps' saved copies (they then could not open with no
- * connection until next opened online).
+ * app's copy is named by its own path ("/household-admin-app/shell-0a1b2c3-0123456789ab"), and an
+ * app only ever deletes its own. LEGACY (the app's own, in its header) matches the names this app
+ * used before copies were named by path.
  */
 const APP = new URL('./', sw.location.href).pathname;
 const CACHE = `${APP}${VERSION}`;
-/** Caches from before they were named by app ("shell-v15"): removed once. Never another app's current one. */
-const UNNAMED = /^shell-v\d+$/;
+/**
+ * A published release: publishing stamps VERSION with the commit and a hash of every file, so any
+ * change is a new release. Anything else is an unpublished copy (the marker publishing replaces).
+ */
+const RELEASE = /^shell-([0-9a-f]{7,40})-[0-9a-f]{12}$/.exec(VERSION);
+
+/**
+ * Fills this release's saved copy. Every file comes from the site itself, never the browser's own
+ * copy (which may hold the previous release for ten minutes). If version.js is not this release's
+ * own, the copy is dropped again, so files from two releases are never mixed.
+ */
+function fill() {
+  return caches.open(CACHE)
+    .then((cache) => cache.addAll(SHELL.map((url) => new Request(url, { cache: 'reload' }))).then(() => cache.match('version.js')))
+    .then(async (response) => {
+      if (RELEASE && !(response && (await response.text()).includes(`· ${RELEASE[1]}'`))) {
+        await caches.delete(CACHE);
+        throw new Error('stale release files');
+      }
+    });
+}
+
+/**
+ * If the saved copy is ever missing or incomplete (the browser or anything else cleared it), it is
+ * filled again in the background, so the app can still open without a connection next time.
+ * @type {Promise<void>|null}
+ */
+let repairing = null;
+function repair() {
+  if (!repairing) {
+    repairing = caches.open(CACHE).then((cache) => cache.keys())
+      .then((keys) => (keys.length >= SHELL.length ? null : fill()))
+      .catch(() => { /* tried again on the next miss */ })
+      .then(() => { repairing = null; });
+  }
+  return repairing;
+}
 
 sw.addEventListener('install', (/** @type {any} */ event) => {
-  // 'reload' fetches each file from the site itself, not the browser's ten-minute copy.
-  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(SHELL.map((url) => new Request(url, { cache: 'reload' }))))
-    .then(() => sw.skipWaiting()));
+  event.waitUntil(fill().then(() => sw.skipWaiting()));
 });
 
+// The page asks which release this worker serves before it reloads for a new one.
+sw.addEventListener('message', (/** @type {any} */ event) => {
+  if (event.data && event.data.type === 'version' && event.ports && event.ports[0]) event.ports[0].postMessage({ version: VERSION });
+});
+
+// Only this app's own earlier copies are removed; the other apps' stay.
 sw.addEventListener('activate', (/** @type {any} */ event) => {
   event.waitUntil(caches.keys()
-    .then((keys) => Promise.all(keys.filter((k) => k !== CACHE && (k.startsWith(APP) || UNNAMED.test(k))).map((k) => caches.delete(k))))
+    .then((keys) => Promise.all(keys.filter((k) => k !== CACHE && (k.startsWith(APP) || LEGACY.test(k))).map((k) => caches.delete(k))))
     .then(() => sw.clients.claim()));
 });
-
-// Network first, so a new version shows straight away; the saved copy covers having no connection.
-// 'no-cache' asks GitHub Pages whether each file changed instead of trusting the browser's
-// ten-minute copy, so the app never runs old files against a newer server.
-// Only a whole, good answer (200) replaces the saved copy, never an empty or error one (a "304 Not
-// Modified" re-check, a brief 404 or 503 from the site): in the Family Calendar such an answer
-// replaced the good copy and the app opened unstyled and stuck on "Loading…" with no connection
-// (RT's Android phone, 2026-10-02).
-
-/**
- * How long the network gets before the saved copy is used. Connected but with no internet (mobile
- * data used up), a request does not fail: it hangs, and the app stayed on its opening screen
- * (RT, 2026-10-02, first in the Family Calendar).
- */
-const PAGE_WAIT_MS = 3000;
-const FILE_WAIT_MS = 5000;
-/**
- * Pages opened from the saved copy, and when: for the next minute their files come from the saved
- * copy too, at once, so one page never mixes saved and newer files. After that the page is back to
- * network first, so it still notices a new version.
- * @type {Map<string, number>}
- */
-const openedFromSaved = new Map();
-const SAVED_MODE_MS = 60 * 1000;
 
 sw.addEventListener('fetch', (/** @type {any} */ event) => {
   const url = new URL(event.request.url);
   if (event.request.method !== 'GET' || url.origin !== sw.location.origin) return;
-  if (event.request.mode === 'navigate') {
-    event.respondWith(networkOrSaved(event, PAGE_WAIT_MS, () => { if (event.resultingClientId) openedFromSaved.set(event.resultingClientId, Date.now()); }));
+  // An unpublished copy: the network first, the saved copy only with no connection.
+  if (!RELEASE) {
+    event.respondWith(fetch(event.request, { cache: 'no-store' })
+      .catch(() => caches.open(CACHE).then((cache) => cache.match(event.request, { ignoreVary: true })).then((hit) => hit || Response.error())));
     return;
   }
-  const since = openedFromSaved.get(event.clientId);
-  if (since !== undefined && Date.now() - since < SAVED_MODE_MS) {
-    event.respondWith(offlineCopy(event.request).then((saved) => (saved.type === 'error' ? fromNetwork(event.request) : saved)));
+  // The release check (version.js with a query) is the one thing that must come from the network.
+  if (/\/version\.js$/.test(url.pathname) && url.search) {
+    event.respondWith(fetch(event.request, { cache: 'no-store' }).catch(() => Response.error()));
     return;
   }
-  openedFromSaved.delete(event.clientId);
-  event.respondWith(networkOrSaved(event, FILE_WAIT_MS));
+  // Everything the page itself loads, its own version.js included, comes from this release's saved
+  // copy. The site's "Vary" header is ignored (the files are the same for everyone), and the page
+  // matches whatever its query (a reload marker such as ?v=).
+  event.respondWith(caches.open(CACHE)
+    .then((cache) => cache.match(event.request, { ignoreSearch: event.request.mode === 'navigate', ignoreVary: true }))
+    .then((hit) => {
+      if (hit) return hit;
+      event.waitUntil(repair());
+      return fetch(event.request);
+    }));
 });
-
-/**
- * The file from the site, saving a good answer for later.
- * @param {any} request
- */
-function fromNetwork(request) {
-  return fetch(request, { cache: 'no-cache' }).then((response) => {
-    if (response.status === 200 && response.type === 'basic') {
-      const copy = response.clone();
-      caches.open(CACHE).then((cache) => cache.put(request, copy));
-    }
-    return response;
-  });
-}
-
-/**
- * The network's answer if it comes in time; otherwise the saved copy, while the network carries on
- * in the background (a good answer is still saved for next time). With nothing saved, the network
- * is waited for however long it takes.
- * @param {any} event
- * @param {number} waitMs
- * @param {() => void} [usedSaved]
- */
-async function networkOrSaved(event, waitMs, usedSaved) {
-  const network = fromNetwork(event.request);
-  const quiet = network.catch(() => null);
-  const first = await Promise.race([quiet, new Promise((resolve) => { setTimeout(() => resolve(null), waitMs); })]);
-  if (first) return first;
-  const saved = await offlineCopy(event.request);
-  if (saved.type === 'error') return network.catch(() => saved);
-  if (usedSaved) usedSaved();
-  event.waitUntil(quiet);
-  return saved;
-}
-
-/**
- * The saved copy of a file, for when the network is unavailable. The site's "Vary" header is
- * ignored: the files are the same for everyone. Opening the app at any address gets the page.
- * @param {any} request
- */
-async function offlineCopy(request) {
-  const cache = await caches.open(CACHE);
-  const hit = await cache.match(request, { ignoreVary: true, ignoreSearch: true });
-  if (hit && hit.status === 200) return hit;
-  if (request.mode === 'navigate') {
-    const page = await cache.match('./', { ignoreVary: true, ignoreSearch: true });
-    if (page && page.status === 200) return page;
-  }
-  return Response.error();
-}

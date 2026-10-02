@@ -1,5 +1,5 @@
 // @ts-check
-// GENERATED from app-kit/pwa/auth.js. Do not edit here: change it in ../app-kit, then run "npm run sync:kit".
+// GENERATED from app-kit/pwa/auth.js. Do not edit here: change it in ../app-kit, then run "node ../app-kit/sync.js" in this app.
 
 /**
  * Sign-in. Google Identity Services is used once per phone: its ID token (kept in memory only)
