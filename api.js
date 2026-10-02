@@ -12,6 +12,16 @@ import { session, saveSession, forgetSession, googleToken } from './auth.js';
 export let lastTiming = { total_ms: 0, server_ms: /** @type {number|null} */ (null), setup_ms: /** @type {number|null} */ (null), served: /** @type {string|null} */ (null) };
 
 /**
+ * Requests that only read. Connected but with no internet (mobile data used up) a request never
+ * fails, it hangs, and the screen stayed on "Updating…" (RT, 2026-10-03): these are given up on
+ * after READ_WAIT_MS, so the saved copy is shown with a clear message. Saves are never given up
+ * on: the server may still finish one, and trying again would save it twice.
+ */
+const READS = new Set(['app.days', 'app.more', 'app.search', 'lists.all', 'meta.get', 'review.inbox']);
+/** Well over the slowest normal answer (about 7 s, first open of the day). */
+export const READ_WAIT_MS = 20 * 1000;
+
+/**
  * One POST. The body is plain text, so the browser sends it without a CORS pre-flight,
  * which Apps Script cannot answer.
  * @param {Record<string, unknown>} body
@@ -19,12 +29,24 @@ export let lastTiming = { total_ms: 0, server_ms: /** @type {number|null} */ (nu
  */
 async function post(body) {
   const started = performance.now();
-  const response = await fetch(CONFIG.apiUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify(body),
-    redirect: 'follow',
-  });
+  const limited = READS.has(String(body.action));
+  const stop = new AbortController();
+  const timer = limited ? setTimeout(() => stop.abort(), READ_WAIT_MS) : undefined;
+  let response;
+  try {
+    response = await fetch(CONFIG.apiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(body),
+      redirect: 'follow',
+      signal: stop.signal,
+    });
+  } catch (e) {
+    if (stop.signal.aborted) throw new Error(`no answer after ${READ_WAIT_MS / 1000} seconds: is there a connection?`);
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
   if (!response.ok) throw new Error(`The server answered ${response.status}`);
   /** @type {ApiResponse} */
   const result = await response.json();

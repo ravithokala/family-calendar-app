@@ -4,7 +4,7 @@
  * Caches the app shell only (ADR-078): no calendar data is ever cached here. Requests to other
  * sites (the API, Google sign-in) are left to the network.
  */
-const VERSION = 'shell-v59';
+const VERSION = 'shell-v60';
 const SHELL = ['./', 'index.html', 'app.js', 'app/state.js', 'app/context.js', 'app/calendar.js', 'app/lists.js', 'app/more.js', 'app/chrome.js', 'api.js', 'auth.js', 'cache.js', 'config.js', 'version.js', 'dom.js', 'views/parts.js', 'views/month.js', 'views/forms.js', 'views/fields.js', 'views/sheet.js', 'views/more.js', 'views/review.js', 'views/sources.js', 'views/print.js', 'views/capture.js', 'views/schools.js', 'views/lists.js', 'views/routines.js', 'views/removed.js', 'views/reminders.js', 'views/search.js', 'views/system.js', 'views/household.js', 'styles.css',
   'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png', 'icons/apple-touch-icon.png'];
 
@@ -26,26 +26,79 @@ sw.addEventListener('activate', (/** @type {any} */ event) => {
     .then(() => sw.clients.claim()));
 });
 
-// Network first, so a new version shows straight away; the cache covers going offline.
+// Network first, so a new version shows straight away; the saved copy covers having no connection.
 // 'no-cache' asks GitHub Pages whether each file changed instead of trusting the browser's
 // ten-minute copy, so the app never runs old files against a newer server.
-// Only a whole, good answer (200) replaces the offline copy. Any answer used to be saved: an empty
+// Only a whole, good answer (200) replaces the saved copy. Any answer used to be saved: an empty
 // or error one (a "304 Not Modified" re-check, a brief 404 or 503 from the site) then replaced the
 // good copy of the styles and scripts, and the app opened unstyled and stuck on "Loading…" with no
 // connection (RT's Android phone, 2026-10-03).
+
+/**
+ * How long the network gets before the saved copy is used. Connected but with no internet (mobile
+ * data used up), a request does not fail: it hangs, and the app stayed on its opening screen
+ * (RT, 2026-10-03).
+ */
+const PAGE_WAIT_MS = 3000;
+const FILE_WAIT_MS = 5000;
+/**
+ * Pages opened from the saved copy, and when: for the next minute their files come from the saved
+ * copy too, at once, so one page never mixes saved and newer files. After that the page is back to
+ * network first, so it still notices a new version.
+ * @type {Map<string, number>}
+ */
+const openedFromSaved = new Map();
+const SAVED_MODE_MS = 60 * 1000;
+
 sw.addEventListener('fetch', (/** @type {any} */ event) => {
   const url = new URL(event.request.url);
   if (event.request.method !== 'GET' || url.origin !== sw.location.origin) return;
-  event.respondWith(fetch(event.request, { cache: 'no-cache' })
-    .then((response) => {
-      if (response.status === 200 && response.type === 'basic') {
-        const copy = response.clone();
-        caches.open(VERSION).then((cache) => cache.put(event.request, copy));
-      }
-      return response;
-    })
-    .catch(() => offlineCopy(event.request)));
+  if (event.request.mode === 'navigate') {
+    event.respondWith(networkOrSaved(event, PAGE_WAIT_MS, () => { if (event.resultingClientId) openedFromSaved.set(event.resultingClientId, Date.now()); }));
+    return;
+  }
+  const since = openedFromSaved.get(event.clientId);
+  if (since !== undefined && Date.now() - since < SAVED_MODE_MS) {
+    event.respondWith(offlineCopy(event.request).then((saved) => (saved.type === 'error' ? fromNetwork(event.request) : saved)));
+    return;
+  }
+  openedFromSaved.delete(event.clientId);
+  event.respondWith(networkOrSaved(event, FILE_WAIT_MS));
 });
+
+/**
+ * The file from the site, saving a good answer for later.
+ * @param {any} request
+ */
+function fromNetwork(request) {
+  return fetch(request, { cache: 'no-cache' }).then((response) => {
+    if (response.status === 200 && response.type === 'basic') {
+      const copy = response.clone();
+      caches.open(VERSION).then((cache) => cache.put(request, copy));
+    }
+    return response;
+  });
+}
+
+/**
+ * The network's answer if it comes in time; otherwise the saved copy, while the network carries on
+ * in the background (a good answer is still saved for next time). With nothing saved, the network
+ * is waited for however long it takes.
+ * @param {any} event
+ * @param {number} waitMs
+ * @param {() => void} [usedSaved]
+ */
+async function networkOrSaved(event, waitMs, usedSaved) {
+  const network = fromNetwork(event.request);
+  const quiet = network.catch(() => null);
+  const first = await Promise.race([quiet, new Promise((resolve) => { setTimeout(() => resolve(null), waitMs); })]);
+  if (first) return first;
+  const saved = await offlineCopy(event.request);
+  if (saved.type === 'error') return network.catch(() => saved);
+  if (usedSaved) usedSaved();
+  event.waitUntil(quiet);
+  return saved;
+}
 
 /**
  * The saved copy of a file, for when the network is unavailable. The site's "Vary" header is
