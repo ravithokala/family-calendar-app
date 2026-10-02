@@ -5,7 +5,7 @@
  * sites (the API, Google sign-in) are left to the network.
  * Only VERSION and SHELL are this app's own: the logic below the marker line comes from app-kit (ADR-100).
  */
-const VERSION = 'shell-v61';
+const VERSION = 'shell-v62';
 const SHELL = ['./', 'index.html', 'app.js', 'app/state.js', 'app/context.js', 'app/calendar.js', 'app/lists.js', 'app/more.js', 'app/chrome.js', 'api.js', 'auth.js', 'cache.js', 'config.js', 'version.js', 'dom.js', 'views/parts.js', 'views/month.js', 'views/forms.js', 'views/fields.js', 'views/sheet.js', 'views/more.js', 'views/review.js', 'views/sources.js', 'views/print.js', 'views/capture.js', 'views/schools.js', 'views/lists.js', 'views/routines.js', 'views/removed.js', 'views/reminders.js', 'views/search.js', 'views/system.js', 'views/household.js', 'styles.css',
   'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png', 'icons/apple-touch-icon.png'];
 
@@ -20,15 +20,27 @@ const SHELL = ['./', 'index.html', 'app.js', 'app/state.js', 'app/context.js', '
  */
 const sw = self;
 
+/**
+ * This app's saved copy. The apps share one origin (github.io), and so one cache storage: each
+ * app's caches are named by its own path ("/household-admin-app/shell-v16"), and an app only ever
+ * deletes its own. Until 2026-10-02 every app's worker deleted every cache but its own current
+ * one, so updating one app removed the other apps' saved copies (they then could not open with no
+ * connection until next opened online).
+ */
+const APP = new URL('./', sw.location.href).pathname;
+const CACHE = `${APP}${VERSION}`;
+/** Caches from before they were named by app ("shell-v15"): removed once. Never another app's current one. */
+const UNNAMED = /^shell-v\d+$/;
+
 sw.addEventListener('install', (/** @type {any} */ event) => {
   // 'reload' fetches each file from the site itself, not the browser's ten-minute copy.
-  event.waitUntil(caches.open(VERSION).then((cache) => cache.addAll(SHELL.map((url) => new Request(url, { cache: 'reload' }))))
+  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(SHELL.map((url) => new Request(url, { cache: 'reload' }))))
     .then(() => sw.skipWaiting()));
 });
 
 sw.addEventListener('activate', (/** @type {any} */ event) => {
   event.waitUntil(caches.keys()
-    .then((keys) => Promise.all(keys.filter((k) => k !== VERSION).map((k) => caches.delete(k))))
+    .then((keys) => Promise.all(keys.filter((k) => k !== CACHE && (k.startsWith(APP) || UNNAMED.test(k))).map((k) => caches.delete(k))))
     .then(() => sw.clients.claim()));
 });
 
@@ -80,7 +92,7 @@ function fromNetwork(request) {
   return fetch(request, { cache: 'no-cache' }).then((response) => {
     if (response.status === 200 && response.type === 'basic') {
       const copy = response.clone();
-      caches.open(VERSION).then((cache) => cache.put(request, copy));
+      caches.open(CACHE).then((cache) => cache.put(request, copy));
     }
     return response;
   });
@@ -112,7 +124,7 @@ async function networkOrSaved(event, waitMs, usedSaved) {
  * @param {any} request
  */
 async function offlineCopy(request) {
-  const cache = await caches.open(VERSION);
+  const cache = await caches.open(CACHE);
   const hit = await cache.match(request, { ignoreVary: true, ignoreSearch: true });
   if (hit && hit.status === 200) return hit;
   if (request.mode === 'navigate') {
