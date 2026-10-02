@@ -20,6 +20,10 @@ h1 .title-short { display: none; }
 @media (max-width: 399px) { h1 .title-long { display: none; } h1 .title-short { display: inline; } }
 .badge { background: var(--bad); color: #fff; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 10px; }
 #account { display: flex; gap: 8px; align-items: center; font-size: 14px; }
+/* Top right (ADR-103): when what is on screen last came from the server, and ↻ to fetch it again now. */
+.refresh { flex: none; display: flex; align-items: center; gap: 6px; min-height: 44px; min-width: 44px; justify-content: flex-end; background: none; border: 0; padding: 0;
+  color: var(--muted); font-size: 13px; white-space: nowrap; cursor: pointer; }
+.refresh span[aria-hidden] { font-size: 20px; line-height: 1; color: var(--accent); }
 #filters { display: flex; gap: 6px; margin-top: 8px; overflow-x: auto; }
 #filters button { border: 1px solid var(--line); background: var(--bg); border-radius: 16px; padding: 4px 14px; font-size: 14px; cursor: pointer; }
 #filters button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--bg); font-weight: 600; }

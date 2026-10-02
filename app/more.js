@@ -6,7 +6,7 @@ import { el } from '../dom.js';
 import { moreView } from '../views/more.js';
 import { reviewView } from '../views/review.js';
 import { formContext } from './context.js';
-import { $, go, today, FRESH_MS, isCurrent, clock, refreshLink, drawSaved, showError, showPending } from './state.js';
+import { $, go, today, FRESH_MS, isCurrent, showUpdated, showUpdating, drawSaved, showError, showPending } from './state.js';
 
 /**
  * The More screen (saved copy first, as with the calendar), from one request (RT, 2026-09-25:
@@ -20,21 +20,25 @@ export async function showMore(mine, force = false, fresh = false) {
   const draw = (/** @type {any} */ data) => moreView(formContext(), data, { openReview: () => go({ screen: 'review' }), today: today() });
   const savedView = saved ? drawSaved(() => draw(saved.data)) : null;
   if (saved && savedView && !force && Date.now() - saved.at < FRESH_MS) {
-    $('main').replaceChildren(savedView, refreshLink(`Updated ${clock(saved.at)}`));
+    $('main').replaceChildren(savedView);
+    showUpdated(saved.at);
     return;
   }
-  if (savedView) $('main').replaceChildren(savedView, el('p', { class: 'status muted' }, 'Updating…'));
+  if (savedView) $('main').replaceChildren(savedView);
   else $('main').replaceChildren(el('p', { class: 'muted' }, 'Loading…'));
+  showUpdating();
   try {
     const r = await call('app.more', fresh ? { fresh: true } : {});
     if (!isCurrent(mine)) return;
     if (!r.ok) throw new Error(r.errors.map((e) => e.message).join('; '));
     showPending(r.data.pending);
     cache.write('more', r.data);
-    $('main').replaceChildren(draw(r.data), refreshLink(`Updated ${clock(Date.now())}`));
+    $('main').replaceChildren(draw(r.data));
+    showUpdated(Date.now());
   } catch (e) {
     if (!isCurrent(mine)) return;
     showError(`Could not load: ${e instanceof Error ? e.message : String(e)}`);
+    showUpdated(saved?.at ?? null);
   }
 }
 
@@ -46,17 +50,20 @@ export async function showReview(mine) {
   const saved = cache.read('review');
   const draw = (/** @type {any} */ inbox) => reviewView(formContext(), inbox);
   const savedView = saved ? drawSaved(() => draw(saved.data)) : null;
-  if (savedView) $('main').replaceChildren(savedView, el('p', { class: 'status muted' }, 'Updating…'));
+  if (savedView) $('main').replaceChildren(savedView);
   else $('main').replaceChildren(el('p', { class: 'muted' }, 'Loading…'));
+  showUpdating();
   try {
     const r = await call('review.inbox');
     if (!isCurrent(mine)) return;
     if (!r.ok) throw new Error(r.errors.map((e) => e.message).join('; '));
     cache.write('review', r.data);
     showPending(r.data.count);
-    $('main').replaceChildren(draw(r.data), refreshLink(`Updated ${clock(Date.now())}`));
+    $('main').replaceChildren(draw(r.data));
+    showUpdated(Date.now());
   } catch (e) {
     if (!isCurrent(mine)) return;
     showError(`Could not load: ${e instanceof Error ? e.message : String(e)}`);
+    showUpdated(saved?.at ?? null);
   }
 }

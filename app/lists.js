@@ -6,7 +6,7 @@ import { el } from '../dom.js';
 import { listsOverview, listDetail, listSheet, isUnsaved, hasPendingSaves } from '../views/lists.js';
 import { toast } from '../views/sheet.js';
 import { formContext } from './context.js';
-import { $, app, go, readState, today, isCurrent, drawSaved, showError, clock, refreshLink } from './state.js';
+import { $, app, go, readState, today, isCurrent, drawSaved, showError, showUpdated, showUpdating } from './state.js';
 
 /**
  * The copy of the lists in memory: one for every visit to Lists, so saves still running from an
@@ -34,20 +34,13 @@ export function addOnLists() {
   if (onScreen) listSheet(onScreen);
 }
 
-/** When the lists were last fetched from the server, for the "Updated …" line. */
+/** When the lists were last fetched from the server, for the header's "updated" time (ADR-103). */
 let fetchedAt = 0;
 
-/**
- * The "Updated … · tap to refresh" line under Lists, as on Month and More: a phone app opened
- * from the home screen has no pull-down to refresh (RT, 2026-09-26).
- */
-const updatedLine = () => refreshLink(`Updated ${clock(fetchedAt)}`);
-
-/** Keeps the line's time current when a check finds nothing new (no redraw). */
+/** Keeps the header's time current when a check finds nothing new (no redraw). */
 function markFetched() {
   fetchedAt = Date.now();
-  const line = document.querySelector('#main > .status');
-  if (line) line.replaceWith(updatedLine());
+  showUpdated(fetchedAt);
 }
 
 /** Whether a new list or item is still being saved. */
@@ -89,7 +82,7 @@ function pollWhileOpen(mine, drawIt) {
       if (!changed) return;
       listsData = r.data;
       if (!document.querySelector('dialog[open]') && !(/** @type {HTMLInputElement|null} */ (document.querySelector('.add-input'))?.value)) {
-        $('main').replaceChildren(drawIt(), updatedLine());
+        $('main').replaceChildren(drawIt());
       }
     } catch (e) {
       // The next check tries again.
@@ -115,7 +108,7 @@ export async function showLists(mine, force = false, fresh = false) {
     get data() { return /** @type {import('../views/lists.js').ListsData} */ (listsData); },
     set data(v) { listsData = v; },
     open: (listId) => go({ screen: 'lists', list: listId }),
-    redraw: () => { if (readState().screen === 'lists') $('main').replaceChildren(drawIt(), updatedLine()); },
+    redraw: () => { if (readState().screen === 'lists') $('main').replaceChildren(drawIt()); },
     // A list change can change what the calendar shows under "To do": saved months stay, but refresh.
     persist: () => { cache.write('lists', screen.data); cache.staleCalendar(); },
     reload: () => { if (isCurrent(mine)) app.show(true); },
@@ -127,8 +120,8 @@ export async function showLists(mine, force = false, fresh = false) {
   const drawIt = () => { const list = readState().list; return list ? listDetail(screen, list, today()) : listsOverview(screen); };
   const savedView = saved ? drawSaved(drawIt) : null;
   fetchedAt = saved?.at || fetchedAt;
-  if (savedView) $('main').replaceChildren(savedView, updatedLine());
-  else $('main').replaceChildren(el('p', { class: 'muted' }, 'Loading…'));
+  if (savedView) { $('main').replaceChildren(savedView); showUpdated(fetchedAt || null); }
+  else { $('main').replaceChildren(el('p', { class: 'muted' }, 'Loading…')); showUpdating(); }
   pollWhileOpen(mine, drawIt);
   // Always ask: lists are shared and change often, so even a minute-old copy may miss the other
   // phone's changes (RT, 2026-09-25). The saved copy is on screen meanwhile.
@@ -143,12 +136,11 @@ export async function showLists(mine, force = false, fresh = false) {
     cache.write('lists', r.data);
     // Keep what is being typed: only redraw if the quick-add box is empty.
     const typing = /** @type {HTMLInputElement|null} */ (document.querySelector('.add-input'))?.value;
-    fetchedAt = Date.now();
-    if (!typing) $('main').replaceChildren(drawIt(), updatedLine());
-    else markFetched();
+    if (!typing) $('main').replaceChildren(drawIt());
+    markFetched();
   } catch (e) {
     if (!isCurrent(mine)) return;
-    if (!savedView) showError(`Could not load: ${e instanceof Error ? e.message : String(e)}`);
+    if (!savedView) { showError(`Could not load: ${e instanceof Error ? e.message : String(e)}`); showUpdated(null); }
     else toast(`Could not refresh: ${e instanceof Error ? e.message : String(e)}`);
   }
 }

@@ -116,9 +116,12 @@ export function showSignedIn() {
   $('chrome').hidden = false;
   $('account').replaceChildren(
     // Search (ADR-094): its own button; the version stays on the title.
-    el('button', { id: 'search-button', class: 'link search-button', type: 'button', 'aria-label': 'Search', onclick: openSearch }, '🔍'),
-    // Who is signed in; Sign out is in More → Account (ADR-101).
-    el('span', { class: 'muted' }, user() ?? ''));
+    el('button', { id: 'search-button', class: 'link search-button', type: 'button', 'aria-label': 'Search', onclick: openSearch }, '🔍'));
+  // Top right (ADR-103): when the screen last came from the server; tapping fetches it again now, has
+  // the server rebuild its answer (ADR-088) and checks for a newer version of the app (ADR-102).
+  // Who is signed in, and Sign out, are in More → Account (ADR-101).
+  $('refresh').hidden = false;
+  $('refresh').onclick = () => { app.checkForUpdate(true); app.show(true, true); };
   $('filters').replaceChildren(...app.views.map((v) => el('button', { 'data-view': v, onclick: () => go({ view: v }) }, v === 'FAMILY' ? 'Family' : v)),
     // Routines on or off for Month and Week (ADR-096): pressed means shown.
     el('button', { 'data-routines': '', class: 'routines-chip', 'aria-label': 'Show routines', onclick: () => { setRoutinesHidden(!routinesHidden()); app.show(); } }, '⟳ Routines'));

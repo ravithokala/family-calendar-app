@@ -2,6 +2,7 @@
 
 import { el, isoDate, addDays, addMonths, mondayOf, niceDate, longDate, monthTitle } from '../dom.js';
 import { monthRange } from '../views/month.js';
+import { updatedText } from '../freshness.js';
 
 /**
  * What every part of the app shares: the settings loaded from the server, where the app is (the
@@ -102,11 +103,21 @@ export const isCurrent = (mine) => mine === showing;
 export const clock = (at) => new Date(at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 
 /**
- * The "Updated …" line; tapping it refreshes now, and asks the server to rebuild too rather than
- * use its saved answer (ADR-088). It also checks for a newer version of the app (ADR-102).
- * @param {string} text
+ * The header's top right (ADR-103): when what is on screen last came from the server ("09:14 ↻").
+ * Tapping it (set up in chrome.js) fetches again now, asks the server to rebuild rather than use
+ * its saved answer (ADR-088), and checks for a newer version of the app (ADR-102).
+ * @param {number|null} at  when the screen's data came from the server; null if it has none yet
+ * @param {boolean} [refreshing]  a fetch is on its way
  */
-export const refreshLink = (text) => el('p', { class: 'status muted', onclick: () => { app.checkForUpdate(true); app.show(true, true); } }, `${text} · tap to refresh`);
+export function showUpdated(at, refreshing = false) {
+  const text = updatedText({ lastSynced: at, refreshing, online: navigator.onLine }, Date.now());
+  $('updated').textContent = text.short;
+  $('refresh').setAttribute('aria-label', text.label);
+  $('refresh').title = text.label;
+}
+
+/** The header shows a fetch is on its way. */
+export const showUpdating = () => showUpdated(null, true);
 
 /** @param {string} message */
 export function showError(message) {

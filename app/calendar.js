@@ -12,7 +12,7 @@ import { toast } from '../views/sheet.js';
 import { busy } from '../views/fields.js';
 import { formContext } from './context.js';
 import { acceptBackgroundLists } from './lists.js';
-import { $, app, go, today, FRESH_MS, isCurrent, clock, refreshLink, drawSaved, showError, showPending, routinesHidden } from './state.js';
+import { $, app, go, today, FRESH_MS, isCurrent, clock, showUpdated, showUpdating, drawSaved, showError, showPending, routinesHidden } from './state.js';
 
 /**
  * The calendar screens: Today, Month (default), Week and Day, each for one filter (ADR-080). The
@@ -205,19 +205,23 @@ export async function showCalendar(mine, s, f, force, fresh) {
   const fetchRange = fetchRangeFor(s.screen, s.date, f.from);
   const key = `days:${fetchRange.from}:${fetchRange.to}`;
   const covering = cache.covering(f.from, f.to);
-  const status = el('p', { class: 'status muted' }, 'Updating…');
+  // Under the saved copy: why a refresh failed. The header says when the copy is from (ADR-103).
+  const status = el('p', { class: 'status muted' });
   const savedView = covering ? drawSaved(() => draw(s, covering.data)) : null;
   const saved = savedView ? covering : null;
   if (saved && savedView) {
     showPending(saved.data.pending);
     if (!force && Date.now() - saved.at < FRESH_MS) {
-      $('main').replaceChildren(savedView, refreshLink(`Updated ${clock(saved.at)}`));
+      $('main').replaceChildren(savedView);
+      showUpdated(saved.at);
       // Still check the neighbours and the other tabs: anything already held is skipped.
       prefetchAround(s.date).then(prefetchScreens);
       return;
     }
     $('main').replaceChildren(savedView, status);
+    showUpdating();
   } else {
+    showUpdating();
     // An empty month while it loads, rather than a blank page (RT, 2026-09-25).
     const skeleton = s.screen === 'month' ? drawSaved(() => monthView(/** @type {any} */ (app.theme), /** @type {any} */ ({ days: emptyDays(f.from, f.to) }), `${s.date.slice(0, 7)}-01`, today(), () => {}, s.view)) : null;
     if (skeleton) skeleton.classList.add('loading');
@@ -236,13 +240,14 @@ export async function showCalendar(mine, s, f, force, fresh) {
     const parts = [lastTiming.setup_ms === null ? '' : `set-up ${(lastTiming.setup_ms / 1000).toFixed(1)} s`, lastTiming.served ?? ''].filter(Boolean).join(', ');
     const server = lastTiming.server_ms === null ? '' : ` · server ${(lastTiming.server_ms / 1000).toFixed(1)} s${parts ? ` (${parts})` : ''}`;
     $('main').replaceChildren(draw(s, shown ? shown.data : r.data),
-      refreshLink(`Updated ${clock(Date.now())} · ${(lastTiming.total_ms / 1000).toFixed(1)} s${server}`));
+      el('p', { class: 'status muted' }, `Loaded in ${(lastTiming.total_ms / 1000).toFixed(1)} s${server}`));
+    showUpdated(Date.now());
     prefetchAround(s.date).then(prefetchScreens);
   } catch (e) {
     if (!isCurrent(mine)) return;
     if (e instanceof AppOutOfDate && reloadForUpdate()) return;
     const message = `Could not refresh: ${e instanceof Error ? e.message : String(e)}`;
-    if (saved) status.textContent = `${message}. Showing ${clock(saved.at)}.`;
-    else showError(message);
+    if (saved) { status.textContent = `${message}. Showing ${clock(saved.at)}.`; showUpdated(saved.at); }
+    else { showError(message); showUpdated(null); }
   }
 }
