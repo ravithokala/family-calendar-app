@@ -72,18 +72,6 @@ function enableSwipe() {
   }, { passive: true });
 }
 
-/** The version this phone last ran, to say once when an update has arrived. */
-const SEEN_VERSION_KEY = 'fc.version';
-
-/** Says "App updated to …" the first time a new version runs; a first install says nothing. */
-export function announceUpdate() {
-  try {
-    const seen = localStorage.getItem(SEEN_VERSION_KEY);
-    if (seen !== VERSION) localStorage.setItem(SEEN_VERSION_KEY, VERSION);
-    if (seen !== null && seen !== VERSION) toast(`App updated to ${VERSION}.`);
-  } catch (e) { /* storage unavailable: nothing to compare with */ }
-}
-
 /**
  * Opens Search with the phone's saved list at once, and fetches a newer one if it is over a minute
  * old (ADR-094).

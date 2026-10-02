@@ -13,7 +13,7 @@ import { formContext } from './app/context.js';
 import { showCalendar } from './app/calendar.js';
 import { showLists } from './app/lists.js';
 import { showMore, showReview } from './app/more.js';
-import { showSignedIn, announceUpdate } from './app/chrome.js';
+import { showSignedIn } from './app/chrome.js';
 import { $, app, go, readState, frame, today, nextTurn, showError, routinesHidden } from './app/state.js';
 
 /**
@@ -109,7 +109,6 @@ async function start() {
     return;
   }
   showSignedIn();
-  announceUpdate();
   await show();
   if (refreshMetaLater) call('meta.get').then((r) => { if (r.ok) cache.write('meta', r.data); }).catch(() => { /* next time */ });
 }
