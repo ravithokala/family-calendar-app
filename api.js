@@ -8,17 +8,28 @@ import { sendRequest, Unreachable, lastTiming } from './request.js';
 /**
  * Talking to the app's server (Apps Script). What differs between apps is in config.js: the
  * address, and which actions only read or are slow by nature (CONFIG.waits); the rest are saves.
+ * Two more settings there, both optional:
+ * - `ownSignIn: true`: the app shows its own sign-in screen. A request made while signed out is
+ *   answered as signed out at once (UNAUTHENTICATED), instead of waiting for Google to sign the
+ *   phone in; the app signs in with startSession().
+ * - `waits.save: { first, retry }`: how long a save's two tries wait, where saves are slower than
+ *   the usual 12 and 25 seconds.
+ * Only `export { … }` at the end: the portfolio's offline tests run this file as a plain script.
  *
- * @typedef {{ field: string, code: string, message: string }} Issue
+ * @typedef {{ field: string, code: string, message: string, reason?: string }} Issue
+ *   `reason`: on a sign-in refusal, the short name of the check that failed
  * @typedef {{ ok: boolean, data: any, errors: Issue[], warnings: Issue[], server_ms?: number, setup_ms?: number, served?: string }} ApiResponse
  */
+
+/** The app's settings this file reads. */
+const settings = /** @type {{ apiUrl: string, ownSignIn?: boolean, waits: { reads: readonly string[], slow: readonly string[], save?: { first: number, retry: number } } }} */ (CONFIG);
 
 /**
  * How long a request that only reads waits. Connected but with no internet (mobile data used up)
  * a request never fails, it hangs: the saved copy is already on screen, so give up and say so.
  * Well over the slowest normal answer (about 7 s, first open of the day).
  */
-export const READ_WAIT_MS = 20000;
+const READ_WAIT_MS = 20000;
 /** How long signing in and out wait. */
 const SIGN_IN_WAIT_MS = 45000;
 /**
@@ -27,11 +38,11 @@ const SIGN_IN_WAIT_MS = 45000;
  * its answer does not; the one automatic retry then gets the answer. The retry is safe: both
  * carry the same request_id, and the server applies a save once (infra/replays.js).
  */
-export const SAVE_WAIT_MS = 12000;
-export const SAVE_RETRY_WAIT_MS = 25000;
+const SAVE_WAIT_MS = 12000;
+const SAVE_RETRY_WAIT_MS = 25000;
 const SAVE_RETRY_PAUSE_MS = 2000;
 /** Actions that take long by nature (making PDFs, reading an upload, restoring a backup): one try. */
-export const SLOW_WAIT_MS = 180000;
+const SLOW_WAIT_MS = 180000;
 
 /**
  * One request to this app's server (request.js does the sending).
@@ -39,7 +50,7 @@ export const SLOW_WAIT_MS = 180000;
  * @param {number} timeoutMs  0 waits however long it takes
  * @returns {Promise<ApiResponse>}
  */
-const post = (body, timeoutMs) => sendRequest(CONFIG.apiUrl, body, timeoutMs);
+const post = (body, timeoutMs) => sendRequest(settings.apiUrl, body, timeoutMs);
 
 /** @param {ApiResponse} r */
 const reason = (r) => r.errors.map((e) => e.message).join('; ');
@@ -53,7 +64,7 @@ const whenEnded = [];
  * signed in shows nothing. Not called by signing out here, which the app does itself.
  * @param {() => void|Promise<void>} listener
  */
-export function onSessionEnded(listener) {
+function onSessionEnded(listener) {
   whenEnded.push(listener);
 }
 
@@ -63,18 +74,35 @@ async function sessionEnded() {
   for (const listener of whenEnded) await listener();
 }
 
+/** @param {string} message @returns {ApiResponse} */
+const signedOut = (message) => ({ ok: false, data: null, errors: [{ field: 'request', code: 'UNAUTHENTICATED', message }], warnings: [] });
+
+/**
+ * Starts this phone's session with a Google ID token (kept in memory only, never stored) and
+ * keeps the session key. Answers the server's answer; a refusal stores nothing.
+ * @param {string} idToken
+ * @returns {Promise<ApiResponse>}
+ */
+async function startSession(idToken) {
+  const started = await post({ id_token: idToken, action: 'auth.start' }, SIGN_IN_WAIT_MS);
+  if (!started.ok) return started;
+  // Only a key counts: anything else would read back as signed out.
+  if (!/^[0-9a-f]{64}$/.test(started.data?.session)) return signedOut('The server did not start a session');
+  saveSession(started.data.session, started.data.user);
+  return started;
+}
+
 /**
  * This phone's session key, signing in with Google first if there is none.
  * @returns {Promise<string>}
  */
-export async function sessionKey() {
+async function sessionKey() {
   const existing = session();
   if (existing) return existing;
   // Opened offline, Google's sign-in never loaded: waiting for its prompt would never end.
   if (!(await signInReady())) throw new Unreachable('Signed out: close and reopen the app while online to sign in again', false);
-  const started = await post({ id_token: await googleToken(), action: 'auth.start' }, SIGN_IN_WAIT_MS);
+  const started = await startSession(await googleToken());
   if (!started.ok) throw new Error(reason(started));
-  saveSession(started.data.session, started.data.user);
   return started.data.session;
 }
 
@@ -89,13 +117,15 @@ export async function sessionKey() {
  */
 async function once(action, payload, timeoutMs, requestId) {
   for (let attempt = 0; attempt < 2; attempt++) {
+    // An app with its own sign-in screen: signed out is an answer, not a wait for Google.
+    if (settings.ownSignIn && !session()) return signedOut('Signed out: sign in again');
     const body = { session: await sessionKey(), action, payload };
     const result = await post(requestId ? { ...body, request_id: requestId } : body, timeoutMs);
     // An account that is no longer allowed: its key is of no use, so it does not stay on this phone.
     if (!result.ok && result.errors[0]?.code === 'FORBIDDEN') await sessionEnded();
     if (result.ok || result.errors[0]?.code !== 'UNAUTHENTICATED') return result;
     await sessionEnded();
-    if (attempt === 1) return result;
+    if (attempt === 1 || settings.ownSignIn) return result;
   }
   throw new Error('unreachable');
 }
@@ -114,17 +144,18 @@ async function once(action, payload, timeoutMs, requestId) {
  *   form to count as the same save
  * @returns {Promise<ApiResponse>}
  */
-export async function call(action, payload = {}, options = {}) {
+async function call(action, payload = {}, options = {}) {
   if (options.timeoutMs !== undefined) return once(action, payload, options.timeoutMs, options.requestId);
-  if (CONFIG.waits.reads.includes(action)) return once(action, payload, READ_WAIT_MS);
+  if (settings.waits.reads.includes(action)) return once(action, payload, READ_WAIT_MS);
   const requestId = options.requestId ?? crypto.randomUUID();
-  if (CONFIG.waits.slow.includes(action)) return once(action, payload, SLOW_WAIT_MS, requestId);
+  if (settings.waits.slow.includes(action)) return once(action, payload, SLOW_WAIT_MS, requestId);
+  const waits = settings.waits.save ?? { first: SAVE_WAIT_MS, retry: SAVE_RETRY_WAIT_MS };
   try {
-    return await once(action, payload, SAVE_WAIT_MS, requestId);
+    return await once(action, payload, waits.first, requestId);
   } catch (first) {
     if (!(first instanceof Unreachable) || first.offline) throw first;
     await new Promise((resolve) => setTimeout(resolve, SAVE_RETRY_PAUSE_MS));
-    return once(action, payload, SAVE_RETRY_WAIT_MS, requestId);
+    return once(action, payload, waits.retry, requestId);
   }
 }
 
@@ -137,7 +168,7 @@ export async function call(action, payload = {}, options = {}) {
  * @param {{ timeoutMs?: number, requestId?: string }} [options]
  * @returns {Promise<ApiResponse>}
  */
-export async function ask(action, payload = {}, options = {}) {
+async function ask(action, payload = {}, options = {}) {
   try {
     return await call(action, payload, options);
   } catch (e) {
@@ -149,8 +180,20 @@ export async function ask(action, payload = {}, options = {}) {
   }
 }
 
+/**
+ * An app's own "confirm it's you", before something sensitive: a fresh Google ID token for the
+ * signed-in account goes to the server, which remembers when (web.js, 'auth.confirm').
+ * @param {string} idToken
+ * @returns {Promise<ApiResponse>}
+ */
+async function confirmAccount(idToken) {
+  const key = session();
+  if (!key) return signedOut('Signed out: sign in again');
+  return post({ session: key, id_token: idToken, action: 'auth.confirm' }, SIGN_IN_WAIT_MS);
+}
+
 /** Ends this phone's session on the server (best effort) and forgets it here. */
-export async function signOut() {
+async function signOut() {
   const key = session();
   forgetSession();
   if (key) await post({ session: key, action: 'auth.end' }, SIGN_IN_WAIT_MS).catch(() => { /* offline: the key is gone here anyway */ });
@@ -161,7 +204,7 @@ export async function signOut() {
  * unlike signing out here, it is no use unless the server did it.
  * @returns {Promise<ApiResponse>}
  */
-export async function signOutEverywhere() {
+async function signOutEverywhere() {
   const key = session();
   if (!key) throw new Unreachable('Signed out already', false);
   const result = await post({ session: key, action: 'auth.end_all' }, SIGN_IN_WAIT_MS);
@@ -169,5 +212,5 @@ export async function signOutEverywhere() {
   return result;
 }
 
-// What the apps import from here came to live in request.js.
-export { Unreachable, lastTiming };
+// Unreachable and lastTiming came to live in request.js; the apps import them from here.
+export { READ_WAIT_MS, SAVE_WAIT_MS, SAVE_RETRY_WAIT_MS, SLOW_WAIT_MS, onSessionEnded, startSession, sessionKey, call, ask, confirmAccount, signOut, signOutEverywhere, Unreachable, lastTiming };
