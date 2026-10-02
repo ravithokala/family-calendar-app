@@ -1,10 +1,14 @@
 // @ts-check
+// GENERATED from app-kit/pwa/auth.js. Do not edit here: change it in ../app-kit, then run "npm run sync:kit".
 
 /**
- * Sign-in (ADR-078, ADR-079). Google Identity Services is used once per phone: its ID token
- * (kept in memory only) starts an app session on the server, whose key this phone keeps in
- * localStorage. The session lasts 30 days from its last use, so a phone in use stays signed in.
+ * Sign-in. Google Identity Services is used once per phone: its ID token (kept in memory only)
+ * starts an app session on the server, whose key this phone keeps in localStorage. The session
+ * lasts 30 days from its last use, so a phone in use stays signed in.
+ * The apps share one origin (github.io), so each keeps its keys under its own prefix (CONFIG.storage).
  */
+
+import { CONFIG } from './config.js';
 
 /**
  * @typedef {{ credential: string }} CredentialResponse
@@ -16,12 +20,14 @@
  * } } }} GoogleIdentity
  */
 
-const SESSION = 'fc.session';
-const USER = 'fc.user';
+const SESSION = `${CONFIG.storage}.session`;
+const USER = `${CONFIG.storage}.user`;
 
 /** @type {Array<(token: string) => void>} */
 let waiting = [];
 let ready = false;
+/** Google's sign-in did not load (the app was opened with no connection). */
+let failed = false;
 
 /** @returns {GoogleIdentity} */
 const gis = () => /** @type {any} */ (window).google;
@@ -34,7 +40,7 @@ function get(key) {
 /** The app session key, if this phone is signed in. */
 export const session = () => get(SESSION);
 
-/** The application user (e.g. RT), for display. */
+/** The application user (e.g. RT). */
 export const user = () => get(USER);
 
 /** @param {string} key @param {string} who */
@@ -59,7 +65,10 @@ export function forgetSession() {
  */
 export async function init(clientId, buttonHost) {
   for (let i = 0; i < 100 && !gis()?.accounts?.id; i++) await new Promise((r) => setTimeout(r, 100));
-  if (!gis()?.accounts?.id) throw new Error('Google sign-in did not load. Check the connection and reload.');
+  if (!gis()?.accounts?.id) {
+    failed = true;
+    throw new Error('Google sign-in did not load. Check the connection and reload.');
+  }
   gis().accounts.id.initialize({
     client_id: clientId,
     callback: (/** @type {CredentialResponse} */ response) => {
@@ -73,6 +82,17 @@ export async function init(clientId, buttonHost) {
   });
   gis().accounts.id.renderButton(buttonHost, { theme: 'outline', size: 'large', text: 'signin_with', shape: 'pill' });
   ready = true;
+}
+
+/**
+ * Whether Google's sign-in is ready, so a prompt can appear. Just after the app opens it may still
+ * be loading: that is waited for. It never loads if the app was opened with no connection.
+ * @param {number} [waitMs]
+ * @returns {Promise<boolean>}
+ */
+export async function signInReady(waitMs = 10000) {
+  for (let waited = 0; !ready && !failed && waited < waitMs; waited += 100) await new Promise((r) => setTimeout(r, 100));
+  return ready;
 }
 
 /**

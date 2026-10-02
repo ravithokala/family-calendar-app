@@ -1,9 +1,13 @@
 // @ts-check
+// GENERATED from app-kit/pwa/api.js. Do not edit here: change it in ../app-kit, then run "npm run sync:kit".
 
 import { CONFIG } from './config.js';
-import { session, saveSession, forgetSession, googleToken } from './auth.js';
+import { session, saveSession, forgetSession, googleToken, signInReady } from './auth.js';
 
 /**
+ * Talking to the app's server (Apps Script). What differs between apps is in config.js: the
+ * address, and how long each kind of request waits (CONFIG.waits).
+ *
  * @typedef {{ field: string, code: string, message: string }} Issue
  * @typedef {{ ok: boolean, data: any, errors: Issue[], warnings: Issue[], server_ms?: number, setup_ms?: number, served?: string }} ApiResponse
  */
@@ -12,44 +16,73 @@ import { session, saveSession, forgetSession, googleToken } from './auth.js';
 export let lastTiming = { total_ms: 0, server_ms: /** @type {number|null} */ (null), setup_ms: /** @type {number|null} */ (null), served: /** @type {string|null} */ (null) };
 
 /**
- * Requests that only read. Connected but with no internet (mobile data used up) a request never
- * fails, it hangs, and the screen stayed on "Updating…" (RT, 2026-10-03): these are given up on
- * after READ_WAIT_MS, so the saved copy is shown with a clear message. Saves are never given up
- * on: the server may still finish one, and trying again would save it twice.
+ * How long a request that only reads waits. Connected but with no internet (mobile data used up)
+ * a request never fails, it hangs: the saved copy is already on screen, so give up and say so.
+ * Well over the slowest normal answer (about 7 s, first open of the day).
  */
-const READS = new Set(['app.days', 'app.more', 'app.search', 'lists.all', 'meta.get', 'review.inbox']);
-/** Well over the slowest normal answer (about 7 s, first open of the day). */
-export const READ_WAIT_MS = 20 * 1000;
+export const READ_WAIT_MS = 20000;
+/** How long signing in and out wait. */
+const SIGN_IN_WAIT_MS = 45000;
+
+/** How long this action waits unless the caller says otherwise; 0 is however long it takes. @param {string} action */
+const waitFor = (action) => (CONFIG.waits.reads.includes(action) ? READ_WAIT_MS : CONFIG.waits.other);
+
+/**
+ * The request did not get an answer from the app's server code: no connection, or Google
+ * answered with its own error page, or it took too long. `offline` says the phone itself has no
+ * connection. Whether trying again is safe is the caller's business: only if the server applies
+ * a repeated save once.
+ */
+export class Unreachable extends Error {
+  /** @param {string} message @param {boolean} offline */
+  constructor(message, offline) {
+    super(message);
+    this.name = 'Unreachable';
+    this.offline = offline;
+  }
+}
 
 /**
  * One POST. The body is plain text, so the browser sends it without a CORS pre-flight,
  * which Apps Script cannot answer.
  * @param {Record<string, unknown>} body
+ * @param {number} timeoutMs  0 waits however long it takes
  * @returns {Promise<ApiResponse>}
  */
-async function post(body) {
+async function post(body, timeoutMs) {
   const started = performance.now();
-  const limited = READS.has(String(body.action));
-  const stop = new AbortController();
-  const timer = limited ? setTimeout(() => stop.abort(), READ_WAIT_MS) : undefined;
+  const abort = new AbortController();
+  const timer = timeoutMs > 0 ? setTimeout(() => abort.abort(), timeoutMs) : undefined;
+  /** @type {Response} */
   let response;
+  /** @type {string} */
+  let text;
   try {
     response = await fetch(CONFIG.apiUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify(body),
       redirect: 'follow',
-      signal: stop.signal,
+      signal: abort.signal,
     });
+    text = await response.text();
   } catch (e) {
-    if (stop.signal.aborted) throw new Error(`no answer after ${READ_WAIT_MS / 1000} seconds: is there a connection?`);
-    throw e;
+    // A failed fetch looks the same whether the phone is offline or Google sent its own error page
+    // (which has no CORS header): only the phone's own online flag tells them apart.
+    if (!navigator.onLine) throw new Unreachable("You're offline", true);
+    throw new Unreachable(abort.signal.aborted ? `No answer after ${Math.round(timeoutMs / 1000)} seconds: is there a connection?` : "Couldn't reach the server (Google may be busy)", false);
   } finally {
     clearTimeout(timer);
   }
-  if (!response.ok) throw new Error(`The server answered ${response.status}`);
+  if (!response.ok) throw new Unreachable(`The server answered ${response.status}`, false);
   /** @type {ApiResponse} */
-  const result = await response.json();
+  let result;
+  try {
+    result = JSON.parse(text);
+  } catch (e) {
+    // Google's own error page instead of the app's answer.
+    throw new Unreachable('The server sent an unexpected answer (Google may be busy)', false);
+  }
   lastTiming = { total_ms: Math.round(performance.now() - started), server_ms: result.server_ms ?? null, setup_ms: result.setup_ms ?? null, served: result.served ?? null };
   return result;
 }
@@ -58,28 +91,32 @@ async function post(body) {
 const reason = (r) => r.errors.map((e) => e.message).join('; ');
 
 /**
- * This phone's session key, signing in with Google first if there is none (ADR-079).
+ * This phone's session key, signing in with Google first if there is none.
  * @returns {Promise<string>}
  */
 export async function sessionKey() {
   const existing = session();
   if (existing) return existing;
-  const started = await post({ id_token: await googleToken(), action: 'auth.start' });
+  // Opened offline, Google's sign-in never loaded: waiting for its prompt would never end.
+  if (!(await signInReady())) throw new Unreachable('Signed out: close and reopen the app while online to sign in again', false);
+  const started = await post({ id_token: await googleToken(), action: 'auth.start' }, SIGN_IN_WAIT_MS);
   if (!started.ok) throw new Error(reason(started));
   saveSession(started.data.session, started.data.user);
   return started.data.session;
 }
 
 /**
- * Calls the server (ADR-078). An expired or revoked session is dropped and the call retried
- * once after signing in again.
+ * Calls the server. An expired or revoked session is dropped and the call retried once after
+ * signing in again.
  * @param {string} action
  * @param {unknown} [payload]
+ * @param {{ timeoutMs?: number }} [options]  how long to wait for the answer, instead of CONFIG.waits
  * @returns {Promise<ApiResponse>}
  */
-export async function call(action, payload = {}) {
+export async function call(action, payload = {}, options = {}) {
+  const timeoutMs = options.timeoutMs ?? waitFor(action);
   for (let attempt = 0; attempt < 2; attempt++) {
-    const result = await post({ session: await sessionKey(), action, payload });
+    const result = await post({ session: await sessionKey(), action, payload }, timeoutMs);
     if (result.ok || result.errors[0]?.code !== 'UNAUTHENTICATED' || attempt === 1) return result;
     forgetSession();
   }
@@ -90,5 +127,5 @@ export async function call(action, payload = {}) {
 export async function signOut() {
   const key = session();
   forgetSession();
-  if (key) await post({ session: key, action: 'auth.end' }).catch(() => { /* offline: the key is gone here anyway */ });
+  if (key) await post({ session: key, action: 'auth.end' }, SIGN_IN_WAIT_MS).catch(() => { /* offline: the key is gone here anyway */ });
 }

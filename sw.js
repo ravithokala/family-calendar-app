@@ -3,10 +3,16 @@
 /**
  * Caches the app shell only (ADR-078): no calendar data is ever cached here. Requests to other
  * sites (the API, Google sign-in) are left to the network.
+ * Only VERSION and SHELL are this app's own: the logic below the marker line comes from app-kit (ADR-100).
  */
-const VERSION = 'shell-v60';
+const VERSION = 'shell-v61';
 const SHELL = ['./', 'index.html', 'app.js', 'app/state.js', 'app/context.js', 'app/calendar.js', 'app/lists.js', 'app/more.js', 'app/chrome.js', 'api.js', 'auth.js', 'cache.js', 'config.js', 'version.js', 'dom.js', 'views/parts.js', 'views/month.js', 'views/forms.js', 'views/fields.js', 'views/sheet.js', 'views/more.js', 'views/review.js', 'views/sources.js', 'views/print.js', 'views/capture.js', 'views/schools.js', 'views/lists.js', 'views/routines.js', 'views/removed.js', 'views/reminders.js', 'views/search.js', 'views/system.js', 'views/household.js', 'styles.css',
   'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png', 'icons/apple-touch-icon.png'];
+
+// ---- Below this line: app-kit/pwa/sw-core.js. GENERATED: change it in ../app-kit, then run "npm run sync:kit". ----
+
+// The service worker's logic, the same in every app. Each app's pwa/sw.js starts with its own
+// VERSION and SHELL (the files to save), then this, below the marker line.
 
 /**
  * The worker's global scope. Typed loosely: the DOM and WebWorker type libraries cannot be combined.
@@ -29,15 +35,15 @@ sw.addEventListener('activate', (/** @type {any} */ event) => {
 // Network first, so a new version shows straight away; the saved copy covers having no connection.
 // 'no-cache' asks GitHub Pages whether each file changed instead of trusting the browser's
 // ten-minute copy, so the app never runs old files against a newer server.
-// Only a whole, good answer (200) replaces the saved copy. Any answer used to be saved: an empty
-// or error one (a "304 Not Modified" re-check, a brief 404 or 503 from the site) then replaced the
-// good copy of the styles and scripts, and the app opened unstyled and stuck on "Loading…" with no
-// connection (RT's Android phone, 2026-10-03).
+// Only a whole, good answer (200) replaces the saved copy, never an empty or error one (a "304 Not
+// Modified" re-check, a brief 404 or 503 from the site): in the Family Calendar such an answer
+// replaced the good copy and the app opened unstyled and stuck on "Loading…" with no connection
+// (RT's Android phone, 2026-10-02).
 
 /**
  * How long the network gets before the saved copy is used. Connected but with no internet (mobile
  * data used up), a request does not fail: it hangs, and the app stayed on its opening screen
- * (RT, 2026-10-03).
+ * (RT, 2026-10-02, first in the Family Calendar).
  */
 const PAGE_WAIT_MS = 3000;
 const FILE_WAIT_MS = 5000;
@@ -107,10 +113,10 @@ async function networkOrSaved(event, waitMs, usedSaved) {
  */
 async function offlineCopy(request) {
   const cache = await caches.open(VERSION);
-  const hit = await cache.match(request, { ignoreVary: true });
+  const hit = await cache.match(request, { ignoreVary: true, ignoreSearch: true });
   if (hit && hit.status === 200) return hit;
   if (request.mode === 'navigate') {
-    const page = await cache.match('./', { ignoreVary: true });
+    const page = await cache.match('./', { ignoreVary: true, ignoreSearch: true });
     if (page && page.status === 200) return page;
   }
   return Response.error();
