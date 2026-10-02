@@ -24,6 +24,14 @@ import { CONFIG } from './config.js';
 /** Where this phone keeps its session key, and (for apps that name their users) who it is. */
 const SESSION_KEY = `${CONFIG.storage}.session`;
 const USER_KEY = `${CONFIG.storage}.user`;
+/**
+ * Set by signing out, cleared by the next sign-in: Google must not sign this phone straight back
+ * in. Telling Google itself (disableAutoSelect) is not enough when the page reloads at once: it
+ * may not have taken effect, and the reloaded page was signed back in by Google's automatic
+ * prompt, so signing out took two taps (RT, 2026-10-02, calendar and Household). After signing
+ * out, signing in needs a tap on Google's button.
+ */
+const SIGNED_OUT_KEY = `${CONFIG.storage}.signed-out`;
 
 /** @type {Array<(token: string) => void>} */
 let waiting = [];
@@ -46,6 +54,9 @@ const session = () => {
   return key !== null && /^[0-9a-f]{64}$/.test(key) ? key : null;
 };
 
+/** Whether the last thing this phone did was sign out. */
+const choseToSignOut = () => get(SIGNED_OUT_KEY) !== null;
+
 /** The application user (e.g. RT), in apps that name their users. */
 const user = () => get(USER_KEY);
 
@@ -54,6 +65,7 @@ function saveSession(key, who) {
   try {
     localStorage.setItem(SESSION_KEY, key);
     if (who) localStorage.setItem(USER_KEY, who);
+    localStorage.removeItem(SIGNED_OUT_KEY);
   } catch (e) { /* storage unavailable: the phone will just sign in again */ }
 }
 
@@ -86,7 +98,8 @@ async function init(clientId, buttonHost, text = 'signin_with') {
         waiting = [];
         resolve.forEach((fn) => fn(response.credential));
       },
-      auto_select: true,
+      // Signs a returning user in without a tap, unless they signed out.
+      auto_select: !choseToSignOut(),
       use_fedcm_for_prompt: true,
       cancel_on_tap_outside: false,
     });
@@ -108,24 +121,27 @@ async function signInReady(waitMs = 10000) {
 
 /**
  * The next Google ID token, from the button or Google's prompt; used only to start (or confirm) a
- * session. Google's prompt is shown for the first wait unless told not to: an app that keeps
- * listening after a sign-in (for the button being tapped again) waits without prompting.
+ * session. Google's prompt is shown for the first wait unless told not to (an app that keeps
+ * listening after a sign-in, for the button being tapped again, waits without prompting), and
+ * never just after signing out: then the button is the way in.
  * @param {{ prompt?: boolean }} [options]
  * @returns {Promise<string>}
  */
 function googleToken(options = {}) {
   return new Promise((resolve) => {
     waiting.push(resolve);
-    if (options.prompt !== false && ready && waiting.length === 1) gis().accounts.id.prompt();
+    if (options.prompt !== false && ready && waiting.length === 1 && !choseToSignOut()) gis().accounts.id.prompt();
   });
 }
 
 /** Shows Google's own prompt again (an app that draws its sign-in screen more than once). */
 function showPrompt() {
-  if (ready) gis().accounts.id.prompt();
+  if (ready && !choseToSignOut()) gis().accounts.id.prompt();
 }
 
+/** Part of signing out: Google is told not to sign this phone back in by itself, and so is this app. */
 function signOutOfGoogle() {
+  try { localStorage.setItem(SIGNED_OUT_KEY, '1'); } catch (e) { /* storage unavailable */ }
   gis()?.accounts?.id?.disableAutoSelect();
 }
 
