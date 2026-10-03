@@ -11,7 +11,7 @@ import { schoolDatesSheet } from './schools.js';
  * by the app.
  *
  * @typedef {{ source_id: string, title: string, source_type: string, source_url: string|null, received_at: string,
- *   trust_level: string, candidates: number, scope_type?: string }} SourceSummary
+ *   trust_level: string, candidates: number, scope_type?: string, removable?: boolean }} SourceSummary
  */
 
 /** Keep within the server's limit. */
@@ -24,6 +24,42 @@ const readBase64 = (file) => new Promise((resolve, reject) => {
   reader.onerror = () => reject(reader.error);
   reader.readAsDataURL(file);
 });
+
+/**
+ * A PDF's fingerprint from its bytes, to notice the same file added twice (ADR-107); null where the
+ * phone cannot work it out (then the check is simply skipped).
+ * @param {File} file
+ * @returns {Promise<string|null>}
+ */
+async function fingerprint(file) {
+  try {
+    const digest = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
+    return `pdf-sha256:${[...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('')}`;
+  } catch (e) {
+    return null;
+  }
+}
+
+/**
+ * The same PDF was added before (ADR-107): carry on with that one, or add it again anyway.
+ * @param {import('./forms.js').FormContext} ctx
+ * @param {{ source_id: string, title: string, source_type: string, source_url: string|null, scope_type: string, received_at: string, about: string|null }} match
+ * @param {() => Promise<void>} addAgain
+ */
+function addedBeforeSheet(ctx, match, addAgain) {
+  const form = el('div', { class: 'form' },
+    el('p', {}, `This PDF was added on ${niceDate(match.received_at.slice(0, 10))} as "${match.title}"${match.about ? ` (about ${match.about})` : ''}.`),
+    el('p', { class: 'muted small' }, 'Use that one to get its prompt again: nothing is saved twice. Adding it again keeps a second copy.'),
+    el('div', { class: 'actions' },
+      saveButton('Add it again', async () => { sheet.close(); await addAgain(); }),
+      saveButton('Use that one', async () => {
+        const r = await ctx.call('sources.prompt', { source_id: match.source_id });
+        if (!r.ok) { showIssues(sheet.messages, r); return; }
+        sheet.close();
+        extractSheet(ctx, match, r.data.prompt);
+      })));
+  const sheet = openSheet('Added before', form);
+}
 
 /**
  * Add a source.
@@ -70,7 +106,21 @@ export function sourceSheet(ctx, activities) {
         const file = f.file.files?.[0];
         if (!file) { showIssues(sheet.messages, { errors: [{ field: '', message: 'Choose a PDF.' }], warnings: [] }); return; }
         if (file.size > MAX_PDF_BYTES) { showIssues(sheet.messages, { errors: [{ field: '', message: 'The PDF is over 10 MB.' }], warnings: [] }); return; }
-        r = await ctx.call('sources.addPdf', { ...base, file_name: file.name, content_base64: await readBase64(file) });
+        const hash = await fingerprint(file);
+        const send = async () => ctx.call('sources.addPdf', { ...base, file_name: file.name, content_base64: await readBase64(file), ...(hash ? { content_hash: hash } : {}) });
+        const upload = async () => {
+          const added = await send();
+          if (!added.ok) { toast(`Could not add the PDF: ${added.errors.map((e) => e.message).join('; ')}`); return; }
+          extractSheet(ctx, added.data.source, added.data.prompt, added.warnings);
+        };
+        // The same file added before: offer that one first, before uploading it again (ADR-107).
+        const earlier = hash ? await ctx.call('sources.findPdf', { content_hash: hash }) : null;
+        if (earlier?.ok && earlier.data.match) {
+          sheet.close();
+          addedBeforeSheet(ctx, earlier.data.match, upload);
+          return;
+        }
+        r = await send();
       } else {
         r = await ctx.call('sources.addText', { ...base, text: f.text.value });
       }
@@ -146,5 +196,13 @@ export function recentSources(ctx, sources) {
         const r = await busy(/** @type {HTMLButtonElement} */ (ev.currentTarget), () => ctx.call('sources.prompt', { source_id: s.source_id }));
         if (r.ok) extractSheet(ctx, s, r.data.prompt);
         else toast(r.errors.map((e) => e.message).join('; '));
-      } }, 'Extract again'))))));
+      } }, 'Extract again'),
+      // Only when nothing came from it, e.g. added by mistake or twice (ADR-107).
+      s.removable ? el('button', { class: 'link danger-text', type: 'button', onclick: async (/** @type {Event} */ ev) => {
+        const pdf = s.source_type === 'PDF';
+        if (!window.confirm(`Remove "${s.title}"? Nothing on the calendar or in Review came from it.${pdf ? ' Its PDF goes to the Drive bin.' : ''}`)) return;
+        const r = await busy(/** @type {HTMLButtonElement} */ (ev.currentTarget), () => ctx.call('sources.remove', { source_id: s.source_id }));
+        if (r.ok) ctx.saved(`Removed "${s.title}".`, r);
+        else toast(r.errors.map((e) => e.message).join('; '));
+      } }, 'Remove') : '')))));
 }
