@@ -3,6 +3,7 @@
 import { el, niceDate } from '../dom.js';
 import { openSheet, showIssues, toast } from './sheet.js';
 import { field, input, select, checkbox, saveButton, busy } from './fields.js';
+import { schoolDatesSheet } from './schools.js';
 
 /**
  * Sources from the phone (ADR-075, ADR-082): paste a message or pick a PDF; the app shows the
@@ -10,7 +11,7 @@ import { field, input, select, checkbox, saveButton, busy } from './fields.js';
  * by the app.
  *
  * @typedef {{ source_id: string, title: string, source_type: string, source_url: string|null, received_at: string,
- *   trust_level: string, candidates: number }} SourceSummary
+ *   trust_level: string, candidates: number, scope_type?: string }} SourceSummary
  */
 
 /** Keep within the server's limit. */
@@ -84,7 +85,7 @@ export function sourceSheet(ctx, activities) {
  * Step two: copy the prompt to your assistant (attaching the PDF if it is one), paste its reply,
  * import. What it finds goes to Review.
  * @param {import('./forms.js').FormContext} ctx
- * @param {{ source_id: string, title: string, source_type: string, source_url?: string|null }} source
+ * @param {{ source_id: string, title: string, source_type: string, source_url?: string|null, scope_type?: string }} source
  * @param {string} prompt
  * @param {Array<{ message: string }>} [warnings]
  */
@@ -99,7 +100,9 @@ export function extractSheet(ctx, source, prompt, warnings = []) {
     el('ol', { class: 'steps' },
       el('li', {}, 'Copy the prompt into ChatGPT or Claude', pdf ? el('strong', {}, ' and attach the PDF') : '', '.'),
       el('li', {}, 'Paste its reply below.'),
-      el('li', {}, 'Import: what it finds appears in Review.')),
+      el('li', {}, source.scope_type === 'SCHOOL'
+        ? 'Import: events go to Review; the term dates it finds are shown to check and save.'
+        : 'Import: what it finds appears in Review.')),
     promptBox,
     el('div', { class: 'row-actions' },
       el('button', { class: 'link', type: 'button', onclick: async () => {
@@ -117,6 +120,11 @@ export function extractSheet(ctx, source, prompt, warnings = []) {
         d.alreadyCancelled && `${d.alreadyCancelled} already cancelled`, d.alreadyPending && `${d.alreadyPending} already waiting`,
       ].filter(Boolean);
       sheet.close();
+      // A school's term dates are looked over and saved next (ADR-106); events are already in Review.
+      if (d.school && d.school_dates?.length) {
+        schoolDatesSheet(ctx, source.source_id, d.school, d.school_dates, parts.join(', ') || 'nothing new');
+        return;
+      }
       ctx.saved(`Imported: ${parts.join(', ') || 'nothing new'}.`, r);
     })));
   const sheet = openSheet(`Extract: ${source.title}`, form);

@@ -2,7 +2,7 @@
 
 import { el, niceDate, fullDate } from '../dom.js';
 import { openSheet, showIssues } from './sheet.js';
-import { field, input, select, saveButton } from './fields.js';
+import { field, input, select, checkbox, saveButton } from './fields.js';
 
 /**
  * School dates on the phone (ADR-084): each child's school, its coming breaks, and a form for a
@@ -54,6 +54,41 @@ export function schoolsSection(ctx, periods, today) {
           : el('ul', { class: 'items' }, coming.slice(0, 8).map((p) => el('li', { class: 'item' },
             el('span', { class: 'time' }, LABELS[p.period_type] ?? p.period_type), el('div', { class: 'body' }, span(p))))));
     }));
+}
+
+/**
+ * A school's dates read from its PDF (ADR-106): after importing the assistant's reply, the dates it
+ * found are listed to look over against the PDF, each ticked unless already recorded; Save records
+ * the ticked ones against that PDF. Nothing is saved until then.
+ * @param {import('./forms.js').FormContext} ctx
+ * @param {string} sourceId
+ * @param {{ school_id: string, school_name: string, person: string }} school
+ * @param {Array<{ period_type: string, start_date: string, end_date: string, recorded: boolean }>} dates
+ * @param {string} imported  what the same import did with events, e.g. "1 to review"
+ */
+export function schoolDatesSheet(ctx, sourceId, school, dates, imported) {
+  const fresh = dates.filter((d) => !d.recorded);
+  const rows = fresh.map((d) => ({ d, box: checkbox(true, `${LABELS[d.period_type] ?? d.period_type} · ${span(/** @type {Period} */ (/** @type {unknown} */ (d)))}`) }));
+  const recorded = dates.filter((d) => d.recorded);
+  const form = el('div', { class: 'form' },
+    el('p', { class: 'muted small' }, `Events: ${imported}.`),
+    fresh.length
+      ? el('p', {}, `Check these against the PDF and untick any that are wrong. They are saved for ${school.person}'s school, ${school.school_name}.`)
+      : el('p', {}, 'Every date found is already recorded: nothing to save.'),
+    el('div', { class: 'school-dates' }, rows.map((r) => r.box.node)),
+    recorded.length ? el('details', {}, el('summary', { class: 'muted' }, `Already recorded (${recorded.length})`),
+      el('ul', { class: 'items' }, recorded.map((d) => el('li', { class: 'item plain' },
+        el('span', { class: 'time' }, LABELS[d.period_type] ?? d.period_type),
+        el('div', { class: 'body' }, span(/** @type {Period} */ (/** @type {unknown} */ (d)))))))) : '',
+    fresh.length ? el('div', { class: 'actions' }, saveButton('Save school dates', async () => {
+      const periods = rows.filter((r) => r.box.get()).map(({ d }) => ({ period_type: d.period_type, start_date: d.start_date, end_date: d.end_date }));
+      if (periods.length === 0) { showIssues(sheet.messages, { errors: [{ field: '', message: 'Nothing is ticked.' }], warnings: [] }); return; }
+      const r = await ctx.call('schools.addPeriods', { ...school, source_id: sourceId, periods });
+      if (!r.ok) { showIssues(sheet.messages, r); return; }
+      sheet.close();
+      ctx.saved(`Saved ${r.data.added} school date${r.data.added === 1 ? '' : 's'} for ${school.person}.`, r);
+    })) : '');
+  const sheet = openSheet(`School dates found: ${school.person}`, form);
 }
 
 /**

@@ -10,7 +10,7 @@ import { $, go, today, FRESH_MS, isCurrent, clock, showUpdated, showUpdating, sh
 
 /**
  * A refresh that failed: the saved copy stays on screen with a note above it, as on Month; only
- * with nothing saved is the screen the message alone (RT, 2026-10-03: More went blank offline).
+ * with nothing saved is the screen the message alone (RT, 2026-10-02: More went blank offline).
  * @param {unknown} e
  * @param {{ at: number } | null} saved
  * @param {HTMLElement|null} savedView

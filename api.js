@@ -68,6 +68,16 @@ function onSessionEnded(listener) {
   whenEnded.push(listener);
 }
 
+/**
+ * Whether a refusal ends what this phone may show: the session has ended (UNAUTHENTICATED) or the
+ * account is no longer allowed (FORBIDDEN). The rule in every app: only these clear the screen.
+ * Any other failed refresh (a busy or faulty server, a refused request, no answer, no connection)
+ * leaves the saved copy on screen with a note (freshness.js, refreshFailedText).
+ * @param {unknown} code  a refusal's code (errors[0].code)
+ * @returns {boolean}
+ */
+const endsAccess = (code) => code === 'UNAUTHENTICATED' || code === 'FORBIDDEN';
+
 /** The key is of no use any more: it does not stay on this phone, and nor does the saved data. */
 async function sessionEnded() {
   forgetSession();
@@ -213,4 +223,4 @@ async function signOutEverywhere() {
 }
 
 // Unreachable and lastTiming came to live in request.js; the apps import them from here.
-export { READ_WAIT_MS, SAVE_WAIT_MS, SAVE_RETRY_WAIT_MS, SLOW_WAIT_MS, onSessionEnded, startSession, sessionKey, call, ask, confirmAccount, signOut, signOutEverywhere, Unreachable, lastTiming };
+export { READ_WAIT_MS, SAVE_WAIT_MS, SAVE_RETRY_WAIT_MS, SLOW_WAIT_MS, onSessionEnded, endsAccess, startSession, sessionKey, call, ask, confirmAccount, signOut, signOutEverywhere, Unreachable, lastTiming };
