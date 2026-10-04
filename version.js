@@ -1,4 +1,4 @@
 // @ts-check
 
-/** Published 3 Oct 2026 · 6e21168. */
-export const VERSION = '3 Oct 2026 · 6e21168';
+/** Published 4 Oct 2026 · 128a854. */
+export const VERSION = '4 Oct 2026 · 128a854';

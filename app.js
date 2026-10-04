@@ -8,6 +8,7 @@ import * as cache from './cache.js';
 import { VERSION } from './version.js';
 import { watchForUpdates } from './update.js';
 import { inFrame, FRAMED_MESSAGE } from './guard.js';
+import { watchInstall } from './install.js';
 import { printSheet } from './views/print.js';
 import { formContext } from './app/context.js';
 import { showCalendar } from './app/calendar.js';
@@ -77,6 +78,8 @@ async function loadMeta() {
 async function start() {
   // GitHub Pages cannot forbid framing: refuse to run inside another page (ADR-105; app-kit's guard.js).
   if (inFrame()) { showError(FRAMED_MESSAGE); return; }
+  // Chrome offers to install once, early: listen before anything else (ADR-108, app-kit's install.js).
+  watchInstall();
   // When the server ends this phone's session (expired, "sign out all devices" elsewhere, or the account no
   // longer allowed), the saved answers go too, and the app starts again at sign-in (ADR-105).
   onSessionEnded(() => { cache.clear(); window.location.reload(); });
