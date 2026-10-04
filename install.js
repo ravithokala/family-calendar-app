@@ -79,8 +79,9 @@ async function install() {
 
 /** What to say when there is no button. */
 function installHint() {
-  const ios = /iPhone|iPad|iPod/.test(navigator.userAgent);
-  return ios ? 'On iPhone: open this page in Safari, tap Share, then Add to Home Screen.'
+  // iPads say they are Macs; a Mac with a touch screen is an iPad.
+  const ios = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  return ios ? 'On iPhone or iPad: open this page in Safari, tap Share, then Add to Home Screen.'
     : 'Open this page in Chrome to install it. If no Install button appears, it is probably installed already: look for its icon.';
 }
 
