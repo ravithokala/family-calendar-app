@@ -9,7 +9,7 @@ import { phoneChecks } from '../checks.js';
  * phone's own (ADR-105; app-kit's checks.js, the same in Household Admin). The last result is kept
  * in memory only, so it survives More redrawing but not a reload.
  *
- * @typedef {{ name: string, ok: boolean, detail: string }} CheckLine
+ * @typedef {{ name: string, ok: boolean, detail: string, items?: string[] }} CheckLine  items: a short list under the line (Failed requests, ADR-109)
  * @typedef {{ running: true } | { result: import('../api.js').ApiResponse, phone: CheckLine[] }} CheckState
  */
 
@@ -32,7 +32,8 @@ export function systemSection(ctx) {
     const line = (c) => el('li', { class: 'item plain' },
       el('div', { class: 'body' },
         el('div', {}, el('span', { class: c.ok ? 'check-ok' : 'check-fail', 'aria-label': c.ok ? 'Passed' : 'Failed' }, c.ok ? '✓ ' : '✕ '), c.name),
-        el('div', { class: 'details' }, c.detail)));
+        el('div', { class: 'details' }, c.detail),
+        c.items?.length ? el('ul', { class: 'details check-items' }, c.items.map((i) => el('li', {}, i))) : ''));
     const status = state && 'running' in state ? 'Checking… this can take up to a minute'
       : checks ? `${failed ? `${failed} of ${total} checks failed` : `All ${total} checks passed`}${typeof result?.data?.ms === 'number' ? ` · ${(result.data.ms / 1000).toFixed(1)} s` : ''}`
         : result ? `Could not run the check: ${result.errors?.[0]?.message ?? 'unknown'}`
