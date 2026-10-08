@@ -27,7 +27,8 @@ let lastTiming = { total_ms: 0, server_ms: null, setup_ms: null, served: null };
 class Unreachable extends Error {
   /**
    * @param {string} message @param {boolean} offline
-   * @param {'offline'|'timeout'|'busy'|'unexpected'|'http'} [kind]  what went wrong, for the phone's note of problems
+   * @param {'offline'|'timeout'|'busy'|'unexpected'|'http'|'signed_out'} [kind]  what went wrong, for the phone's note of problems
+   *   ('signed_out': no request was sent, the phone could not sign in)
    * @param {number|null} [status]  the HTTP status, when the server answered with one
    */
   constructor(message, offline, kind = offline ? 'offline' : 'busy', status = null) {

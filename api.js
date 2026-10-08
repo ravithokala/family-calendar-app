@@ -27,9 +27,12 @@ const settings = /** @type {{ apiUrl: string, ownSignIn?: boolean, waits: { read
 /**
  * How long a request that only reads waits. Connected but with no internet (mobile data used up)
  * a request never fails, it hangs: the saved copy is already on screen, so give up and say so.
- * Well over the slowest normal answer (about 7 s, first open of the day).
+ * Well over the slowest normal answer (about 7 s, first open of the day), and over Google's slow
+ * spells (20 s was too short for them: RT, 2026-10-08). A read that gets no answer is tried once
+ * more after a short pause: reading twice changes nothing.
  */
-const READ_WAIT_MS = 20000;
+const READ_WAIT_MS = 45000;
+const READ_RETRY_PAUSE_MS = 5000;
 /** How long signing in and out wait. */
 const SIGN_IN_WAIT_MS = 45000;
 /**
@@ -51,6 +54,12 @@ const SLOW_WAIT_MS = 180000;
  * @returns {Promise<ApiResponse>}
  */
 const post = (body, timeoutMs) => sendRequest(settings.apiUrl, body, timeoutMs);
+
+/**
+ * Whether a request went out and got no usable answer, with this phone connected: worth one more try.
+ * @param {unknown} e
+ */
+const noAnswer = (e) => e instanceof Unreachable && !e.offline && e.kind !== 'signed_out';
 
 /** @param {ApiResponse} r */
 const reason = (r) => r.errors.map((e) => e.message).join('; ');
@@ -110,7 +119,7 @@ async function sessionKey() {
   const existing = session();
   if (existing) return existing;
   // Opened offline, Google's sign-in never loaded: waiting for its prompt would never end.
-  if (!(await signInReady())) throw new Unreachable('Signed out: close and reopen the app while online to sign in again', false);
+  if (!(await signInReady())) throw new Unreachable('Signed out: close and reopen the app while online to sign in again', false, 'signed_out');
   const started = await startSession(await googleToken());
   if (!started.ok) throw new Error(reason(started));
   return started.data.session;
@@ -142,7 +151,8 @@ async function once(action, payload, timeoutMs, requestId) {
 
 /**
  * Calls the server. What kind of action it is (config.js, CONFIG.waits) decides how:
- * - a read gives up after 20 seconds: the saved copy is on screen;
+ * - a read waits 45 seconds, and with no answer tries once more after 5 seconds (never when the
+ *   phone itself has no connection); then it gives up: the saved copy is on screen;
  * - a slow action gets one long try;
  * - anything else is a save: an id, a short first try, and one automatic retry with the same id
  *   if no answer came (never when the phone itself has no connection). Whatever happens to the
@@ -156,14 +166,22 @@ async function once(action, payload, timeoutMs, requestId) {
  */
 async function call(action, payload = {}, options = {}) {
   if (options.timeoutMs !== undefined) return once(action, payload, options.timeoutMs, options.requestId);
-  if (settings.waits.reads.includes(action)) return once(action, payload, READ_WAIT_MS);
+  if (settings.waits.reads.includes(action)) {
+    try {
+      return await once(action, payload, READ_WAIT_MS);
+    } catch (first) {
+      if (!noAnswer(first)) throw first;
+      await new Promise((resolve) => setTimeout(resolve, READ_RETRY_PAUSE_MS));
+      return once(action, payload, READ_WAIT_MS);
+    }
+  }
   const requestId = options.requestId ?? crypto.randomUUID();
   if (settings.waits.slow.includes(action)) return once(action, payload, SLOW_WAIT_MS, requestId);
   const waits = settings.waits.save ?? { first: SAVE_WAIT_MS, retry: SAVE_RETRY_WAIT_MS };
   try {
     return await once(action, payload, waits.first, requestId);
   } catch (first) {
-    if (!(first instanceof Unreachable) || first.offline) throw first;
+    if (!noAnswer(first)) throw first;
     await new Promise((resolve) => setTimeout(resolve, SAVE_RETRY_PAUSE_MS));
     return once(action, payload, waits.retry, requestId);
   }
@@ -223,4 +241,4 @@ async function signOutEverywhere() {
 }
 
 // Unreachable and lastTiming came to live in request.js; the apps import them from here.
-export { READ_WAIT_MS, SAVE_WAIT_MS, SAVE_RETRY_WAIT_MS, SLOW_WAIT_MS, onSessionEnded, endsAccess, startSession, sessionKey, call, ask, confirmAccount, signOut, signOutEverywhere, Unreachable, lastTiming };
+export { READ_WAIT_MS, READ_RETRY_PAUSE_MS, SAVE_WAIT_MS, SAVE_RETRY_WAIT_MS, SLOW_WAIT_MS, onSessionEnded, endsAccess, startSession, sessionKey, call, ask, confirmAccount, signOut, signOutEverywhere, Unreachable, lastTiming };

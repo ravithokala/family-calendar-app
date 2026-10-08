@@ -10,7 +10,7 @@
  * - SHELL: every file of the app (tests/pwa.test.js checks it).
  * - LEGACY: the names this app's saved copies had before they were named by its path.
  */
-const VERSION = 'shell-9896ead-16c64c3f8491';
+const VERSION = 'shell-478a4e3-2c0fd00936a4';
 const SHELL = ['./', 'index.html', 'app.js', 'app/state.js', 'app/context.js', 'app/calendar.js', 'app/lists.js', 'app/more.js', 'app/chrome.js', 'api.js', 'request.js', 'auth.js', 'update.js', 'freshness.js', 'guard.js', 'checks.js', 'install.js', 'problems.js', 'cache.js', 'config.js', 'version.js', 'dom.js', 'views/parts.js', 'views/month.js', 'views/forms.js', 'views/fields.js', 'views/sheet.js', 'views/more.js', 'views/review.js', 'views/sources.js', 'views/print.js', 'views/capture.js', 'views/schools.js', 'views/lists.js', 'views/routines.js', 'views/removed.js', 'views/reminders.js', 'views/search.js', 'views/system.js', 'views/household.js', 'views/account.js', 'views/install.js', 'styles.css',
   'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png', 'icons/apple-touch-icon.png'];
 const LEGACY = /^shell-v\d+$/;
