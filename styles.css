@@ -119,6 +119,8 @@ main { padding: 8px 12px calc(76px + env(safe-area-inset-bottom)); max-width: 82
 .ms-poster { margin-top: 12px; }
 .poster-preview { display: block; width: 100%; height: auto; border-radius: 4px; box-shadow: 0 1px 6px rgba(0, 0, 0, 0.18); background: #fff; }
 .poster-notes:empty { display: none; }
+.poster-save { margin-top: 12px; }
+.poster-save:empty { display: none; }
 .ms-focus { position: relative; }
 .ms-focus-img { width: 100%; display: block; border-radius: 8px; }
 .ms-focus-dot { position: absolute; width: 22px; height: 22px; margin: -11px 0 0 -11px; border-radius: 50%; border: 3px solid #FFFFFF; box-shadow: 0 0 0 2px #22252A; pointer-events: none; }
