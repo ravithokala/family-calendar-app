@@ -160,7 +160,7 @@ export function milestoneDetails(ctx, m) {
       try {
         last = await ctx.call('milestones.addPhoto', { milestone_id: m.milestone_id, ...(await shrink(file)) });
       } catch (e) {
-        last = { ok: false, data: null, errors: [{ field: '', code: 'PHOTO', message: `That photo could not be read (${e instanceof Error ? e.message : String(e)}).` }], warnings: [] };
+        last = { ok: false, data: null, errors: [{ field: '', code: 'PHOTO', message: `${files.length > 1 ? `Photo ${i + 1} could not be added` : 'That photo could not be added'}: ${e instanceof Error ? e.message : String(e)}.` }], warnings: [] };
       }
       if (!last.ok) { showIssues(sheet.messages, last); status.hidden = true; return; }
     }

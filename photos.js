@@ -72,17 +72,52 @@ export function forgetPhotos() {
 }
 
 /**
- * @param {HTMLImageElement} img
+ * @typedef {{ source: CanvasImageSource, width: number, height: number, close: () => void }} Picture
+ */
+
+/** The file's kind, for a message: its type, else its extension. @param {File} file */
+const kindOf = (file) => (file.type || file.name.split('.').pop() || 'unknown').toLowerCase();
+
+/**
+ * Opens a picked photo the right way up. Two ways, because browsers differ in what each can open
+ * (RT, 2026-10-09: "The source image cannot be decoded."): an <img>, then createImageBitmap.
+ * @param {File} file
+ * @returns {Promise<Picture>}
+ */
+async function open(file) {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = new Image();
+    img.src = url;
+    await img.decode();
+    return { source: img, width: img.naturalWidth, height: img.naturalHeight, close: () => URL.revokeObjectURL(url) };
+  } catch (first) {
+    URL.revokeObjectURL(url);
+    try {
+      const bitmap = await createImageBitmap(file, /** @type {any} */ ({ imageOrientation: 'from-image' }));
+      return { source: bitmap, width: bitmap.width, height: bitmap.height, close: () => bitmap.close() };
+    } catch (second) {
+      const kind = kindOf(file);
+      const heic = /hei[cf]/.test(kind);
+      throw new Error(heic
+        ? `it is a ${kind} photo, which this phone's browser cannot open. Pick a JPEG instead: on an iPhone, Settings → Camera → Formats → Most Compatible; on Android, turn off "high efficiency" pictures in the camera's settings, or share the photo as a JPEG`
+        : `this phone's browser cannot open this kind of photo (${kind}). A JPEG or PNG works`);
+    }
+  }
+}
+
+/**
+ * @param {Picture} pic
  * @param {number} side  the longest side wanted
  * @returns {Promise<string>}  JPEG as base64 (no data: prefix)
  */
-async function scaled(img, side) {
-  const scale = Math.min(1, side / Math.max(img.naturalWidth, img.naturalHeight));
+async function scaled(pic, side) {
+  const scale = Math.min(1, side / Math.max(pic.width, pic.height));
   const canvas = document.createElement('canvas');
-  canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
-  canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
+  canvas.width = Math.max(1, Math.round(pic.width * scale));
+  canvas.height = Math.max(1, Math.round(pic.height * scale));
   const g = /** @type {CanvasRenderingContext2D} */ (canvas.getContext('2d'));
-  g.drawImage(img, 0, 0, canvas.width, canvas.height);
+  g.drawImage(pic.source, 0, 0, canvas.width, canvas.height);
   const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', QUALITY));
   if (!blob) throw new Error('the photo could not be prepared');
   const dataUrl = await new Promise((resolve, reject) => {
@@ -100,19 +135,16 @@ async function scaled(img, side) {
  * @returns {Promise<{ photo_base64: string, thumb_base64: string, width: number, height: number }>}
  */
 export async function shrink(file) {
-  const url = URL.createObjectURL(file);
+  const pic = await open(file);
   try {
-    const img = new Image();
-    img.src = url;
-    await img.decode();
-    const scale = Math.min(1, FULL_SIDE / Math.max(img.naturalWidth, img.naturalHeight));
+    const scale = Math.min(1, FULL_SIDE / Math.max(pic.width, pic.height));
     return {
-      photo_base64: await scaled(img, FULL_SIDE),
-      thumb_base64: await scaled(img, THUMB_SIDE),
-      width: Math.max(1, Math.round(img.naturalWidth * scale)),
-      height: Math.max(1, Math.round(img.naturalHeight * scale)),
+      photo_base64: await scaled(pic, FULL_SIDE),
+      thumb_base64: await scaled(pic, THUMB_SIDE),
+      width: Math.max(1, Math.round(pic.width * scale)),
+      height: Math.max(1, Math.round(pic.height * scale)),
     };
   } finally {
-    URL.revokeObjectURL(url);
+    pic.close();
   }
 }
