@@ -14,7 +14,7 @@ import { formContext } from './app/context.js';
 import { showCalendar } from './app/calendar.js';
 import { showLists } from './app/lists.js';
 import { showMore, showReview } from './app/more.js';
-import { showMilestones } from './app/milestones.js';
+import { showMilestones, openYears } from './app/milestones.js';
 import { showSignedIn } from './app/chrome.js';
 import { $, app, go, readState, frame, today, nextTurn, showError, routinesHidden } from './app/state.js';
 
@@ -42,6 +42,9 @@ async function show(force = false, fresh = false) {
     routines.setAttribute('aria-pressed', String(!routinesHidden()));
   }
   $('title').textContent = f.title;
+  // On Milestones the title lists the years (RT, 2026-10-09); elsewhere it does nothing.
+  $('title').onclick = s.screen === 'milestones' ? () => openYears(Number(s.date.slice(0, 4))) : null;
+  $('title').classList.toggle('tappable-title', s.screen === 'milestones');
   $('print-button').hidden = s.screen !== 'month';
   $('print-button').onclick = () => printSheet(formContext(), today(), s.date.slice(0, 7));
   $('prev').hidden = f.prev === null;

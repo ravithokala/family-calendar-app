@@ -104,6 +104,9 @@ main { padding: 8px 12px calc(76px + env(safe-area-inset-bottom)); max-width: 82
 .ms-grid { display: flex; flex-direction: column; }
 /* Room below December so the + button never covers it. */
 .milestones { padding-bottom: 72px; }
+.tappable-title { cursor: pointer; }
+.year-list { display: flex; flex-direction: column; gap: 8px; }
+.year-list .current { border-color: var(--accent); font-weight: 700; }
 .ms-month { display: grid; grid-template-columns: 2.6em repeat(4, minmax(0, 1fr)); column-gap: 4px; row-gap: 4px; padding: 6px 0; border-bottom: 1px solid var(--line); min-height: 34px; }
 .ms-head { position: sticky; top: 0; background: var(--bg); z-index: 1; font-size: 13px; font-weight: 700; color: var(--muted); }
 .ms-name { text-align: center; }

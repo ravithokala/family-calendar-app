@@ -66,7 +66,8 @@ export function frame(s) {
   // Milestones (ADR-112): one year at a time; ‹ › step a year.
   if (s.screen === 'milestones') {
     const y = Number(s.date.slice(0, 4));
-    return { from: '', to: '', title: `Milestones ${y}`, prev: `${y - 1}-01-01`, next: `${y + 1}-01-01` };
+    // ▾: tapping the title lists the years (RT, 2026-10-09).
+    return { from: '', to: '', title: `Milestones ${y} ▾`, prev: `${y - 1}-01-01`, next: `${y + 1}-01-01` };
   }
   if (s.screen === 'month') {
     const start = `${s.date.slice(0, 7)}-01`;

@@ -54,6 +54,22 @@ export function milestonesView(theme, data, onTap) {
 }
 
 /**
+ * The years to jump to, newest first, each with how many milestones it has.
+ * @param {number[]} years
+ * @param {Record<string, number>} counts
+ * @param {number} current
+ * @param {(year: number) => void} pick
+ */
+export function yearPicker(years, counts, current, pick) {
+  const list = el('div', { class: 'year-list' }, [...years].sort((a, b) => b - a).map((y) => el('button', {
+    type: 'button', class: `wide-button${y === current ? ' current' : ''}`, 'aria-current': String(y === current),
+    onclick: () => { sheet.close(); pick(y); },
+  }, `${y} · ${counts[String(y)] ? `${counts[String(y)]} milestone${counts[String(y)] === 1 ? '' : 's'}` : 'none yet'}`)));
+  const sheet = openSheet('Milestones: choose a year', el('div', { class: 'form' }, list,
+    el('p', { class: 'muted small' }, 'For an earlier year with none yet, add a milestone with its date: its year then appears here.')));
+}
+
+/**
  * Add a milestone, or edit one: what, when (a day, or only the month), who, a note.
  * @param {import('./forms.js').FormContext} ctx
  * @param {{ milestone?: Milestone, title?: string, date?: string, people?: string[], event_id?: string|null, event_title?: string|null }} [prefill]

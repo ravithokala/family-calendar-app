@@ -3,9 +3,21 @@
 import { call } from '../api.js';
 import * as cache from '../cache.js';
 import { el } from '../dom.js';
-import { milestonesView, milestoneDetails } from '../views/milestones.js';
+import { milestonesView, milestoneDetails, yearPicker } from '../views/milestones.js';
 import { formContext } from './context.js';
-import { $, app, isCurrent, clock, showUpdated, showUpdating, showFetched, drawSaved, showError } from './state.js';
+import { $, app, go, isCurrent, clock, showUpdated, showUpdating, showFetched, drawSaved, showError } from './state.js';
+import { toast } from '../views/sheet.js';
+
+/**
+ * Tapping the title on Milestones: every year that has milestones, and this year, to jump to
+ * (RT, 2026-10-09: stepping back with ‹ one year at a time is slow for older years).
+ * @param {number} year  the year on screen
+ */
+export function openYears(year) {
+  const data = cache.read(`milestones:${year}`)?.data;
+  if (!data) { toast('Milestones are still loading.'); return; }
+  yearPicker(data.years, data.counts ?? {}, year, (y) => go({ screen: 'milestones', date: `${y}-01-01` }));
+}
 
 /**
  * The Milestones screen (ADR-112), reached from More: one year, the saved copy first, then the
