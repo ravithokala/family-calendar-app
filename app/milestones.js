@@ -4,6 +4,7 @@ import { call } from '../api.js';
 import * as cache from '../cache.js';
 import { el } from '../dom.js';
 import { milestonesView, milestoneDetails, yearPicker } from '../views/milestones.js';
+import { posterSheet } from '../views/poster.js';
 import { formContext } from './context.js';
 import { $, app, go, isCurrent, clock, showUpdated, showUpdating, showFetched, drawSaved, showError } from './state.js';
 import { toast } from '../views/sheet.js';
@@ -29,7 +30,7 @@ export async function showMilestones(mine, s) {
   const year = Number(s.date.slice(0, 4));
   const key = `milestones:${year}`;
   const saved = cache.read(key);
-  const draw = (/** @type {any} */ data) => milestonesView(/** @type {any} */ (app.theme), data, (m) => milestoneDetails(formContext(), m));
+  const draw = (/** @type {any} */ data) => milestonesView(/** @type {any} */ (app.theme), data, (m) => milestoneDetails(formContext(), m), () => posterSheet(formContext(), year));
   const savedView = saved ? drawSaved(() => draw(saved.data)) : null;
   $('main').replaceChildren(savedView ?? el('p', { class: 'muted' }, 'Loading…'));
   showUpdating();

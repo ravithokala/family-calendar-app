@@ -15,7 +15,7 @@ import { photoUrl, shrink } from '../photos.js';
  *
  * @typedef {{ start: number, span: number, open_left: boolean, open_right: boolean }} Piece
  * @typedef {{ milestone_id: string, title: string, tone: string, pieces: Piece[] }} Placement
- * @typedef {{ file_id: string, thumb_id: string, width: number, height: number, focus_x: number, focus_y: number }} Photo
+ * @typedef {{ file_id: string, thumb_id: string, width: number, height: number, focus_x: number, focus_y: number, poster?: boolean }} Photo
  * @typedef {{ milestone_id: string, title: string, date: string, people: string[], notes: string|null,
  *   event_id: string|null, event_title: string|null, icon?: string|null, highlight?: boolean, photos?: Photo[] }} Milestone
  * @typedef {{ year: number, columns: string[], months: Array<{ month: number, lines: Placement[][] }>,
@@ -44,8 +44,9 @@ function thumb(p, cls) {
  * @param {import('./parts.js').Theme} theme
  * @param {MilestoneYear} data
  * @param {(m: Milestone) => void} onTap
+ * @param {() => void} [onPoster]  makes the year's poster (ADR-113)
  */
-export function milestonesView(theme, data, onTap) {
+export function milestonesView(theme, data, onTap, onPoster) {
   const byId = new Map(data.milestones.map((m) => [m.milestone_id, m]));
   const head = el('div', { class: 'ms-month ms-head' }, el('div', {}, ''),
     ...data.columns.map((c, i) => el('div', { class: 'ms-name', style: { gridColumn: String(i + 2) } }, c)));
@@ -70,7 +71,8 @@ export function milestonesView(theme, data, onTap) {
   });
   const none = data.milestones.length === 0
     ? el('p', { class: 'muted small' }, `No milestones in ${data.year} yet. Add one with +, or with "Add as milestone" on an event.`) : '';
-  return el('div', { class: 'milestones' }, none, el('div', { class: 'ms-grid' }, head, ...months));
+  return el('div', { class: 'milestones' }, none, el('div', { class: 'ms-grid' }, head, ...months),
+    data.milestones.length && onPoster ? el('button', { class: 'wide-button ms-poster', type: 'button', onclick: onPoster }, `Make a poster of ${data.year}`) : '');
 }
 
 /**
@@ -177,6 +179,13 @@ export function milestoneDetails(ctx, m) {
         ctx.saved('That photo is the cover now.', r);
       } }, 'Make cover'),
       el('button', { class: 'link', type: 'button', onclick: () => { sheet.close(); focusSheet(ctx, m, p); } }, 'Set focus'),
+      // A highlight shows up to 2 more photos beside its cover on the poster (RT, 2026-10-09).
+      i > 0 && m.highlight ? el('button', { class: 'link', type: 'button', 'aria-pressed': String(p.poster === true), onclick: async () => {
+        const r = await ctx.call('milestones.updatePhoto', { milestone_id: m.milestone_id, file_id: p.file_id, poster: p.poster !== true });
+        if (!r.ok) { showIssues(sheet.messages, r); return; }
+        sheet.close();
+        ctx.saved(p.poster === true ? 'Taken off the poster.' : 'On the poster, beside the cover.', r);
+      } }, p.poster === true ? '☑ On poster' : '☐ On poster') : '',
       el('button', { class: 'link danger-text', type: 'button', onclick: async () => {
         if (!window.confirm('Remove this photo? It goes to the Drive bin.')) return;
         const r = await ctx.call('milestones.removePhoto', { milestone_id: m.milestone_id, file_id: p.file_id });
@@ -186,6 +195,7 @@ export function milestoneDetails(ctx, m) {
       } }, 'Remove photo')));
   const form = el('div', { class: 'form' },
     photos.length ? el('div', { class: 'ms-photos' }, photos.map(photoRow)) : '',
+    m.highlight && photos.length > 1 ? el('p', { class: 'muted small' }, 'On the poster this highlight shows its cover and up to 2 photos ticked "On poster".') : '',
     el('button', { class: 'wide-button', type: 'button', onclick: () => picker.click() }, photos.length ? '+ Add more photos' : '+ Add photos'),
     picker, status,
     el('p', {}, whenText(m.date)),
