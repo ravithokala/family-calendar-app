@@ -468,15 +468,16 @@ async function untickAll(screen, list, count, button) {
 function itemRow(screen, item, today) {
   const done = item.status === 'DONE';
   const overdue = !done && item.due_date !== null && item.due_date < today;
+  const owner = screen.data.lists.find((l) => l.list_id === item.list_id);
+  const plain = isNotes(owner);
+  const inPlace = ticksInPlace(owner);
   const meta = [
     item.owner.join('+'),
     item.due_date ? `${overdue ? 'overdue · ' : 'by '}${niceDate(item.due_date)}` : '',
     item.notes ?? '',
-    done && item.done_by ? `ticked by ${item.done_by}` : '',
+    // Not on a tick-in-place list: the tick says enough (RT, 2026-10-09).
+    done && item.done_by && !inPlace ? `ticked by ${item.done_by}` : '',
   ].filter(Boolean).join(' · ');
-  const owner = screen.data.lists.find((l) => l.list_id === item.list_id);
-  const plain = isNotes(owner);
-  const inPlace = ticksInPlace(owner);
   const slide = el('div', { class: 'list-item-slide' },
     // A notes list has no tick boxes (ADR-114).
     plain ? '' : el('button', { class: 'tick', type: 'button', 'aria-pressed': String(done), 'aria-label': done ? 'Untick' : 'Tick', onclick: () => toggle(screen, item) }),
