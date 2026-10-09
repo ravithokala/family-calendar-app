@@ -22,6 +22,8 @@ import { field, input, select, chips, saveButton, busy } from './fields.js';
 
 /** A notes list: plain lines for information, no tick boxes (ADR-114). @param {List|undefined} l */
 const isNotes = (l) => l?.kind === 'NOTES';
+/** A tick-in-place list: ticked items stay where they are, greyed, instead of folding into Done (ADR-116). @param {List|undefined} l */
+const ticksInPlace = (l) => l?.kind === 'TICKLIST';
 
 /**
  * A list's items in its chosen order (ADR-115): the dragged ones first, as placed, then the rest in the order added.
@@ -54,7 +56,8 @@ function eventSelect(data, current) {
 export function listSheet(screen, list) {
   const title = input('text', list?.title ?? null, { placeholder: 'e.g. India shopping' });
   const event = eventSelect(screen.data, list?.event_id ?? null);
-  const kind = select(isNotes(list) ? 'NOTES' : 'CHECKLIST', [['CHECKLIST', 'Checklist (tick boxes)'], ['NOTES', 'Notes (no tick boxes, for information)']]);
+  const kind = select(list?.kind === 'NOTES' || list?.kind === 'TICKLIST' ? list.kind : 'CHECKLIST', [['CHECKLIST', 'Checklist (ticked items move to Done)'],
+    ['TICKLIST', 'Tick in place (ticked items stay where they are)'], ['NOTES', 'Notes (no tick boxes, for information)']]);
   const form = el('div', { class: 'form' },
     field('Name', title.node),
     field('Kind', kind.node),
@@ -436,6 +439,27 @@ function toggle(screen, item) {
 }
 
 /**
+ * Unticks every ticked item on the list, after asking (ADR-116).
+ * @param {ListsScreen} screen
+ * @param {List} list
+ * @param {number} count
+ * @param {HTMLButtonElement} button
+ */
+async function untickAll(screen, list, count, button) {
+  if (!window.confirm(`Untick all ${count} ticked item${count === 1 ? '' : 's'} on "${list.title}"?`)) return;
+  const r = await busy(button, async () => {
+    await saving; // ticks still being saved go first
+    return screen.ctx.call('lists.untickAll', { list_id: list.list_id });
+  });
+  if (!r.ok) { toast(`Could not untick: ${r.errors.map((e) => e.message).join('; ')}`); return; }
+  const fresh = new Map(r.data.items.map((/** @type {Item} */ i) => [i.item_id, i]));
+  screen.data.items.forEach((i) => { const next = fresh.get(i.item_id); if (next) Object.assign(i, next); });
+  screen.persist();
+  screen.redraw();
+  toast(`Unticked ${r.data.items.length} item${r.data.items.length === 1 ? '' : 's'}.`);
+}
+
+/**
  * One item row: a tick box, the text, and who / due / notes.
  * @param {ListsScreen} screen
  * @param {Item} item
@@ -450,7 +474,9 @@ function itemRow(screen, item, today) {
     item.notes ?? '',
     done && item.done_by ? `ticked by ${item.done_by}` : '',
   ].filter(Boolean).join(' · ');
-  const plain = isNotes(screen.data.lists.find((l) => l.list_id === item.list_id));
+  const owner = screen.data.lists.find((l) => l.list_id === item.list_id);
+  const plain = isNotes(owner);
+  const inPlace = ticksInPlace(owner);
   const slide = el('div', { class: 'list-item-slide' },
     // A notes list has no tick boxes (ADR-114).
     plain ? '' : el('button', { class: 'tick', type: 'button', 'aria-pressed': String(done), 'aria-label': done ? 'Untick' : 'Tick', onclick: () => toggle(screen, item) }),
@@ -458,8 +484,8 @@ function itemRow(screen, item, today) {
       el('div', { class: 'list-item-text' }, item.text),
       meta ? el('div', { class: `details${overdue ? ' overdue' : ''}` }, meta) : ''),
     // Done items are not dragged; an unsaved one waits for its id (ADR-115).
-    done && !plain || isUnsaved(item.item_id) ? '' : el('span', { class: 'grip', role: 'button', 'aria-label': 'Drag to move', title: 'Drag to move' }, '⠿'));
-  const row = el('li', { class: `list-item${done && !plain ? ' done' : ''}${plain ? ' plain-line' : ''}${isUnsaved(item.item_id) ? ' saving' : ''}` },
+    done && !plain && !inPlace || isUnsaved(item.item_id) ? '' : el('span', { class: 'grip', role: 'button', 'aria-label': 'Drag to move', title: 'Drag to move' }, '⠿'));
+  const row = el('li', { class: `list-item${done && !plain ? (inPlace ? ' ticked' : ' done') : ''}${plain ? ' plain-line' : ''}${isUnsaved(item.item_id) ? ' saving' : ''}` },
     el('button', { class: 'list-item-delete', type: 'button' }, 'Delete'), slide);
   swipeToDelete(row, slide, () => {
     removeItem(screen, item).then((r) => { if (!r.ok) toast(`Could not delete "${item.text}": ${r.errors.map((e) => e.message).join('; ')}`); });
@@ -485,10 +511,10 @@ export function listsOverview(screen) {
     const done = items.filter((i) => i.status === 'DONE').length;
     const event = l.event_id ? events.get(l.event_id) : undefined;
     const plain = isNotes(l);
-    const count = plain ? `${items.length} line${items.length === 1 ? '' : 's'}` : `${done} of ${items.length} done`;
+    const count = plain ? `${items.length} line${items.length === 1 ? '' : 's'}` : `${done} of ${items.length} ${ticksInPlace(l) ? 'ticked' : 'done'}`;
     return el('button', { class: 'list-card', type: 'button', onclick: () => screen.open(l.list_id) },
       el('div', { class: 'list-card-title' }, l.title),
-      el('div', { class: 'details' }, [items.length ? count : 'empty', plain ? 'notes' : '', eventText(event)].filter(Boolean).join(' · ')),
+      el('div', { class: 'details' }, [items.length ? count : 'empty', plain ? 'notes' : ticksInPlace(l) ? 'tick in place' : '', eventText(event)].filter(Boolean).join(' · ')),
       items.length && !plain ? el('div', { class: 'progress' }, el('span', { style: { width: `${Math.round((done / items.length) * 100)}%` } })) : '');
   };
   return el('div', {},
@@ -508,11 +534,13 @@ export function listDetail(screen, listId, today) {
   if (!list) return el('div', {}, el('p', { class: 'muted' }, 'This list is not here any more.'), el('button', { class: 'link', type: 'button', onclick: () => screen.open(null) }, '‹ All lists'));
   const items = ordered(screen.data.items.filter((i) => i.list_id === listId), list.item_order);
   const plain = isNotes(list);
+  const inPlace = ticksInPlace(list);
   // In the order dragged into (ADR-115), else the order added, first at the top, with the add box below them (RT, 2026-10-09; ADR-114 replaces newest first).
-  // A notes list shows every line; a checklist folds its done items away.
-  const open = plain ? items : items.filter((i) => i.status !== 'DONE');
-  const done = plain ? [] : items.filter((i) => i.status === 'DONE');
+  // A notes list and a tick-in-place list show every item where it is; a checklist folds its done items away.
+  const open = plain || inPlace ? items : items.filter((i) => i.status !== 'DONE');
+  const done = plain || inPlace ? [] : items.filter((i) => i.status === 'DONE');
   const event = list.event_id ? screen.data.events.find((e) => e.event_id === list.event_id) : undefined;
+  const ticked = plain ? 0 : items.filter((i) => i.status === 'DONE').length;
 
   const newText = /** @type {HTMLInputElement} */ (el('input', { type: 'text', placeholder: plain ? 'Add a line' : 'Add an item', enterkeyhint: 'done', class: 'add-input' }));
   const add = () => {
@@ -551,6 +579,8 @@ export function listDetail(screen, listId, today) {
       el('ul', { class: 'list-items' }, done.map((i) => itemRow(screen, i, today)))) : '',
     el('div', { class: 'row-actions list-actions' },
       el('button', { class: 'link', type: 'button', onclick: () => listSheet(screen, list) }, 'Rename, change kind or attach to an event'),
+      // ADR-116: e.g. a packing list, ready for the next trip.
+      ticked ? el('button', { class: 'link', type: 'button', onclick: (/** @type {Event} */ ev) => untickAll(screen, list, ticked, /** @type {HTMLButtonElement} */ (ev.currentTarget)) }, 'Untick all') : '',
       el('button', { class: 'link', type: 'button', onclick: async (/** @type {Event} */ ev) => {
         const status = list.status === 'ACTIVE' ? 'ARCHIVED' : 'ACTIVE';
         const r = await busy(/** @type {HTMLButtonElement} */ (ev.currentTarget), () => screen.ctx.call('lists.setStatus', { list_id: listId, status }));
