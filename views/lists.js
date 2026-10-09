@@ -10,7 +10,8 @@ import { field, input, select, chips, saveButton, busy } from './fields.js';
  * list is often used in a shop.
  *
  * @typedef {{ list_id: string, title: string, event_id: string|null, status: string, created_at: string, created_by: string,
- *   done: number, total: number, kind?: string|null }} List  kind: CHECKLIST or NOTES (ADR-114); blank counts as a checklist
+ *   done: number, total: number, kind?: string|null, item_order?: string[] }} List  kind: CHECKLIST or NOTES (ADR-114); blank counts
+ *   as a checklist. item_order: ids in the order dragged into (ADR-115); the rest follow in the order added
  * @typedef {{ item_id: string, list_id: string, text: string, owner: string[], due_date: string|null, notes: string|null,
  *   status: string, done_at: string|null, done_by: string|null }} Item
  * @typedef {{ event_id: string, title: string, start_date: string, participants: string[] }} LinkableEvent
@@ -21,6 +22,17 @@ import { field, input, select, chips, saveButton, busy } from './fields.js';
 
 /** A notes list: plain lines for information, no tick boxes (ADR-114). @param {List|undefined} l */
 const isNotes = (l) => l?.kind === 'NOTES';
+
+/**
+ * A list's items in its chosen order (ADR-115): the dragged ones first, as placed, then the rest in the order added.
+ * @param {Item[]} items  in the order added
+ * @param {string[]|undefined} order
+ */
+export function ordered(items, order) {
+  const place = new Map((order ?? []).map((id, n) => [id, n]));
+  const at = (/** @type {Item} */ i) => place.get(i.item_id) ?? Infinity;
+  return items.map((i, n) => ({ i, n })).sort((a, b) => (at(a.i) - at(b.i)) || (a.n - b.n)).map((x) => x.i);
+}
 
 /** @param {LinkableEvent|undefined} e */
 const eventText = (e) => (e ? `${e.title} · ${niceDate(e.start_date)}` : '');
@@ -204,6 +216,104 @@ function swipeToDelete(row, slide, onDelete) {
   del.addEventListener('click', () => { handle.close(); onDelete(); });
 }
 
+/** Which item each row shows, for reading the order back after a drag. @type {WeakMap<Element, Item>} */
+const rowItems = new WeakMap();
+/** How close to the screen's top or bottom a dragged item scrolls the page, and how fast. */
+const EDGE = 64;
+const EDGE_STEP = 8;
+
+/**
+ * Drag an item by its grip to move it up or down (ADR-115). The grip takes the finger, so scrolling
+ * the list and swiping to delete still work everywhere else on the row. Near the top or bottom of the
+ * screen the page scrolls along.
+ * @param {HTMLElement} row
+ * @param {HTMLElement} grip
+ * @param {() => void} onDrop  called once the item has moved
+ */
+function dragToReorder(row, grip, onDrop) {
+  /** @type {{ y: number, scroll: number, before: Element|null, pointer: number, finger: number, frame: number } | null} */
+  let drag = null;
+  const place = () => {
+    if (!drag) return;
+    const dy = drag.finger + window.scrollY - (drag.y + drag.scroll);
+    const prev = row.previousElementSibling;
+    const next = row.nextElementSibling;
+    if (next instanceof HTMLElement && dy > next.offsetHeight / 2) {
+      row.parentElement?.insertBefore(next, row);
+      drag.y += next.offsetHeight;
+    } else if (prev instanceof HTMLElement && dy < -prev.offsetHeight / 2) {
+      row.parentElement?.insertBefore(row, prev);
+      drag.y -= prev.offsetHeight;
+    }
+    row.style.transform = `translateY(${drag.finger + window.scrollY - (drag.y + drag.scroll)}px)`;
+  };
+  const edgeScroll = () => {
+    if (!drag) return;
+    const step = drag.finger < EDGE ? -EDGE_STEP : drag.finger > window.innerHeight - EDGE ? EDGE_STEP : 0;
+    if (step) { window.scrollBy(0, step); place(); }
+    drag.frame = requestAnimationFrame(edgeScroll);
+  };
+  const finish = () => {
+    if (!drag) return;
+    cancelAnimationFrame(drag.frame);
+    const moved = row.nextElementSibling !== drag.before;
+    drag = null;
+    row.classList.remove('dragging');
+    row.style.transform = '';
+    if (moved) onDrop();
+  };
+  // Not to the row underneath: no swipe, no opening the item.
+  grip.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });
+  grip.addEventListener('click', (e) => e.stopPropagation());
+  grip.addEventListener('pointerdown', (e) => {
+    if (drag || e.button !== 0) return;
+    e.preventDefault();
+    swipedOpen?.close();
+    try { grip.setPointerCapture(e.pointerId); } catch (err) { /* a pointer the browser no longer tracks */ }
+    drag = { y: e.clientY, scroll: window.scrollY, before: row.nextElementSibling, pointer: e.pointerId, finger: e.clientY, frame: 0 };
+    row.classList.add('dragging');
+    drag.frame = requestAnimationFrame(edgeScroll);
+  });
+  grip.addEventListener('pointermove', (e) => {
+    if (!drag || e.pointerId !== drag.pointer) return;
+    drag.finger = e.clientY;
+    place();
+  });
+  grip.addEventListener('pointerup', finish);
+  grip.addEventListener('pointercancel', finish);
+}
+
+/**
+ * Saves the order after a drag: shown at once, saved behind; put back if the save fails.
+ * @param {ListsScreen} screen
+ * @param {List} list
+ * @param {HTMLElement} ul  the dragged rows, top to bottom
+ */
+function saveOrder(screen, list, ul) {
+  const moved = [...ul.children].map((r) => rowItems.get(r)).filter((i) => i !== undefined);
+  const items = ordered(screen.data.items.filter((i) => i.list_id === list.list_id), list.item_order);
+  // A checklist's done items keep their places after the open ones.
+  const sequence = [...moved, ...items.filter((i) => !moved.includes(i))];
+  const before = list.item_order;
+  // Unsaved items have no id yet: they follow, in the order added, as new items do.
+  list.item_order = sequence.map((i) => i.item_id).filter((id) => !isUnsaved(id));
+  screen.persist();
+  screen.redraw();
+  enqueue(async () => {
+    try {
+      const r = await screen.ctx.call('lists.reorder', { list_id: list.list_id, item_ids: sequence.filter((i) => screen.data.items.includes(i) && !isUnsaved(i.item_id)).map((i) => i.item_id) });
+      if (!r.ok) throw new Error(r.errors.map((e) => e.message).join('; '));
+      list.item_order = r.data.list.item_order;
+      screen.persist();
+    } catch (e) {
+      list.item_order = before;
+      screen.persist();
+      screen.redraw();
+      toast(`Could not save the new order: ${message(e)}`);
+    }
+  });
+}
+
 /**
  * Undo for a removed item (ADR-087): it comes back open, where it was.
  * @param {ListsScreen} screen
@@ -346,12 +456,18 @@ function itemRow(screen, item, today) {
     plain ? '' : el('button', { class: 'tick', type: 'button', 'aria-pressed': String(done), 'aria-label': done ? 'Untick' : 'Tick', onclick: () => toggle(screen, item) }),
     el('div', { class: 'list-item-body', onclick: () => itemSheet(screen, item) },
       el('div', { class: 'list-item-text' }, item.text),
-      meta ? el('div', { class: `details${overdue ? ' overdue' : ''}` }, meta) : ''));
+      meta ? el('div', { class: `details${overdue ? ' overdue' : ''}` }, meta) : ''),
+    // Done items are not dragged; an unsaved one waits for its id (ADR-115).
+    done && !plain || isUnsaved(item.item_id) ? '' : el('span', { class: 'grip', role: 'button', 'aria-label': 'Drag to move', title: 'Drag to move' }, '⠿'));
   const row = el('li', { class: `list-item${done && !plain ? ' done' : ''}${plain ? ' plain-line' : ''}${isUnsaved(item.item_id) ? ' saving' : ''}` },
     el('button', { class: 'list-item-delete', type: 'button' }, 'Delete'), slide);
   swipeToDelete(row, slide, () => {
     removeItem(screen, item).then((r) => { if (!r.ok) toast(`Could not delete "${item.text}": ${r.errors.map((e) => e.message).join('; ')}`); });
   });
+  rowItems.set(row, item);
+  const grip = /** @type {HTMLElement|null} */ (slide.querySelector('.grip'));
+  const list = screen.data.lists.find((l) => l.list_id === item.list_id);
+  if (grip && list) dragToReorder(row, grip, () => saveOrder(screen, list, /** @type {HTMLElement} */ (row.parentElement)));
   return row;
 }
 
@@ -390,9 +506,9 @@ export function listsOverview(screen) {
 export function listDetail(screen, listId, today) {
   const list = screen.data.lists.find((l) => l.list_id === listId);
   if (!list) return el('div', {}, el('p', { class: 'muted' }, 'This list is not here any more.'), el('button', { class: 'link', type: 'button', onclick: () => screen.open(null) }, '‹ All lists'));
-  const items = screen.data.items.filter((i) => i.list_id === listId);
+  const items = ordered(screen.data.items.filter((i) => i.list_id === listId), list.item_order);
   const plain = isNotes(list);
-  // In the order added, first at the top, with the add box below them (RT, 2026-10-09; ADR-114 replaces newest first).
+  // In the order dragged into (ADR-115), else the order added, first at the top, with the add box below them (RT, 2026-10-09; ADR-114 replaces newest first).
   // A notes list shows every line; a checklist folds its done items away.
   const open = plain ? items : items.filter((i) => i.status !== 'DONE');
   const done = plain ? [] : items.filter((i) => i.status === 'DONE');
@@ -430,7 +546,7 @@ export function listDetail(screen, listId, today) {
     open.length ? el('ul', { class: 'list-items' }, open.map((i) => itemRow(screen, i, today))) : el('p', { class: 'muted' }, items.length ? 'All done.' : `Nothing on this list yet.`),
     el('div', { class: 'add-row' }, newText, el('button', { class: 'primary', type: 'button', onclick: add }, 'Add')),
     el('button', { class: 'link add-several', type: 'button', onclick: () => severalSheet(screen, list) }, plain ? '+ Add several lines at once' : '+ Add several at once'),
-    open.length ? el('p', { class: 'muted small swipe-hint' }, 'Swipe an item left to delete it.') : '',
+    open.length ? el('p', { class: 'muted small swipe-hint' }, 'Drag ⠿ to move an item; swipe it left to delete it.') : '',
     done.length ? el('details', { class: 'done-items' }, el('summary', { class: 'muted' }, `Done (${done.length})`),
       el('ul', { class: 'list-items' }, done.map((i) => itemRow(screen, i, today)))) : '',
     el('div', { class: 'row-actions list-actions' },
