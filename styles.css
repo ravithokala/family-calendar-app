@@ -227,6 +227,15 @@ textarea.prompt { font: 12px/1.35 ui-monospace, Menlo, Consolas, monospace; back
 .tick[aria-pressed="true"] { background: var(--accent); }
 .tick[aria-pressed="true"]::after { content: ''; width: 6px; height: 12px; margin-top: -3px; border: solid var(--bg); border-width: 0 3px 3px 0; transform: rotate(45deg); }
 .list-item.saving { opacity: 0.55; }
+/* Swipe left to delete (ADR-114): the row slides over a red Delete. */
+.list-item { position: relative; overflow: hidden; touch-action: pan-y; padding: 0; }
+/* The padding is on the part that slides, so it covers the Delete behind it completely. */
+.list-item-slide { display: flex; gap: 12px; align-items: center; flex: 1; min-width: 0; padding: 10px 0; background: var(--bg); position: relative; z-index: 1; }
+.list-item:not(.swiping) .list-item-delete { visibility: hidden; }
+.list-item-delete { position: absolute; top: 0; right: 0; bottom: 0; width: 88px; border: 0; background: var(--bad); color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
+.list-item.plain-line .list-item-text::before { content: "• "; color: var(--muted); }
+.edit-mark { font-size: 0.8em; color: var(--muted); font-weight: 400; }
+.swipe-hint { margin-top: 6px; }
 .add-several { display: block; padding-left: 0; margin: -4px 0 8px; }
 .form textarea { width: 100%; box-sizing: border-box; font: inherit; font-size: 16px; padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); color: var(--text); }
 .list-item-body { flex: 1; cursor: pointer; min-width: 0; }

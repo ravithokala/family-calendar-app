@@ -10,7 +10,7 @@ import { field, input, select, chips, saveButton, busy } from './fields.js';
  * list is often used in a shop.
  *
  * @typedef {{ list_id: string, title: string, event_id: string|null, status: string, created_at: string, created_by: string,
- *   done: number, total: number }} List
+ *   done: number, total: number, kind?: string|null }} List  kind: CHECKLIST or NOTES (ADR-114); blank counts as a checklist
  * @typedef {{ item_id: string, list_id: string, text: string, owner: string[], due_date: string|null, notes: string|null,
  *   status: string, done_at: string|null, done_by: string|null }} Item
  * @typedef {{ event_id: string, title: string, start_date: string, participants: string[] }} LinkableEvent
@@ -18,6 +18,9 @@ import { field, input, select, chips, saveButton, busy } from './fields.js';
  * @typedef {{ ctx: import('./forms.js').FormContext, data: ListsData, open: (listId: string|null) => void,
  *   redraw: () => void, persist: () => void, reload: () => void, renamed: (from: string, to: string) => void }} ListsScreen
  */
+
+/** A notes list: plain lines for information, no tick boxes (ADR-114). @param {List|undefined} l */
+const isNotes = (l) => l?.kind === 'NOTES';
 
 /** @param {LinkableEvent|undefined} e */
 const eventText = (e) => (e ? `${e.title} · ${niceDate(e.start_date)}` : '');
@@ -39,11 +42,13 @@ function eventSelect(data, current) {
 export function listSheet(screen, list) {
   const title = input('text', list?.title ?? null, { placeholder: 'e.g. India shopping' });
   const event = eventSelect(screen.data, list?.event_id ?? null);
+  const kind = select(isNotes(list) ? 'NOTES' : 'CHECKLIST', [['CHECKLIST', 'Checklist (tick boxes)'], ['NOTES', 'Notes (no tick boxes, for information)']]);
   const form = el('div', { class: 'form' },
     field('Name', title.node),
+    field('Kind', kind.node),
     field('Belongs to an event (optional)', event.node),
     el('div', { class: 'actions' }, saveButton(list ? 'Save' : 'Create list', async () => {
-      const values = { title: title.get(), event_id: event.get() };
+      const values = { title: title.get(), event_id: event.get(), kind: kind.get() };
       if (list) {
         const r = await screen.ctx.call('lists.update', { list_id: list.list_id, changes: values });
         if (!r.ok) { showIssues(sheet.messages, r); return; }
@@ -54,7 +59,7 @@ export function listSheet(screen, list) {
       }
       if (!values.title) { showIssues(sheet.messages, { errors: [{ field: 'title', message: 'give the list a name' }], warnings: [] }); return; }
       sheet.close();
-      createList(screen, values.title, values.event_id || null);
+      createList(screen, values.title, values.event_id || null, values.kind ?? 'CHECKLIST');
     })));
   const sheet = openSheet(list ? 'Edit list' : 'New list', form);
   if (!list) title.node.focus();
@@ -66,17 +71,18 @@ export function listSheet(screen, list) {
  * @param {ListsScreen} screen
  * @param {string} title
  * @param {string|null} eventId
+ * @param {string} kind  CHECKLIST or NOTES (ADR-114)
  */
-function createList(screen, title, eventId) {
+function createList(screen, title, eventId, kind) {
   /** @type {List} */
-  const list = { list_id: newId(), title, event_id: eventId, status: 'ACTIVE', created_at: new Date().toISOString(), created_by: 'you', done: 0, total: 0 };
+  const list = { list_id: newId(), title, event_id: eventId, status: 'ACTIVE', created_at: new Date().toISOString(), created_by: 'you', done: 0, total: 0, kind };
   const tempId = list.list_id;
   screen.data.lists.push(list);
   screen.persist();
   screen.open(tempId);
   enqueue(async () => {
     try {
-      const r = await screen.ctx.call('lists.add', { title, event_id: eventId });
+      const r = await screen.ctx.call('lists.add', { title, event_id: eventId, kind });
       if (!r.ok) throw new Error(r.errors.map((e) => e.message).join('; '));
       Object.assign(list, r.data.list);
       screen.data.items.filter((i) => i.list_id === tempId).forEach((i) => { i.list_id = list.list_id; });
@@ -101,13 +107,16 @@ function createList(screen, title, eventId) {
  * @param {Item} item
  */
 function itemSheet(screen, item) {
+  const plain = isNotes(screen.data.lists.find((l) => l.list_id === item.list_id));
   const text = input('text', item.text);
   const owner = chips(screen.ctx.meta.participants, item.owner);
   const due = input('date', item.due_date);
   const notes = input('text', item.notes, { placeholder: 'e.g. 2 kg, the blue one' });
+  // A notes list's line is just text and a note (ADR-114): no who or due date.
   const form = el('div', { class: 'form' },
-    field('Item', text.node), field('Who (optional)', owner.node),
-    el('div', { class: 'row' }, field('Due (optional)', due.node), field('Notes', notes.node)),
+    field(plain ? 'Line' : 'Item', text.node),
+    plain ? '' : field('Who (optional)', owner.node),
+    plain ? field('Notes', notes.node) : el('div', { class: 'row' }, field('Due (optional)', due.node), field('Notes', notes.node)),
     el('div', { class: 'actions' },
       saveButton('Save', async () => {
         const values = { text: text.get(), owner: owner.get(), due_date: due.get(), notes: notes.get() };
@@ -122,15 +131,77 @@ function itemSheet(screen, item) {
         screen.redraw();
       }),
       el('button', { class: 'danger', type: 'button', onclick: async (/** @type {Event} */ ev) => {
-        const r = await busy(/** @type {HTMLButtonElement} */ (ev.currentTarget), async () => { await saving; return screen.ctx.call('listItems.setStatus', { item_id: item.item_id, status: 'REMOVED' }); });
+        const r = await busy(/** @type {HTMLButtonElement} */ (ev.currentTarget), () => removeItem(screen, item));
         if (!r.ok) { showIssues(sheet.messages, r); return; }
-        screen.data.items = screen.data.items.filter((i) => i.item_id !== item.item_id);
         sheet.close();
-        screen.persist();
-        screen.redraw();
-        toast(`Removed "${item.text}".`, [], () => bringBack(screen, item));
       } }, 'Remove')));
-  const sheet = openSheet('Edit item', form);
+  const sheet = openSheet(plain ? 'Edit line' : 'Edit item', form);
+}
+
+/**
+ * Removes an item (status REMOVED: nothing is deleted), with Undo; also in More → Recently removed.
+ * @param {ListsScreen} screen
+ * @param {Item} item
+ * @returns {Promise<import('../api.js').ApiResponse>}
+ */
+async function removeItem(screen, item) {
+  await saving; // a new item gets its real id first
+  const r = await screen.ctx.call('listItems.setStatus', { item_id: item.item_id, status: 'REMOVED' });
+  if (!r.ok) return r;
+  screen.data.items = screen.data.items.filter((i) => i.item_id !== item.item_id);
+  screen.persist();
+  screen.redraw();
+  toast(`Removed "${item.text}".`, [], () => bringBack(screen, item));
+  return r;
+}
+
+/** The row swiped open, showing its Delete; only one at a time. @type {{ close: () => void } | null} */
+let swipedOpen = null;
+const DELETE_WIDTH = 88;
+
+/**
+ * Swipe left on an item to show Delete (ADR-114): sideways only, so scrolling the list still works.
+ * @param {HTMLElement} row
+ * @param {HTMLElement} slide  what moves
+ * @param {() => void} onDelete
+ */
+function swipeToDelete(row, slide, onDelete) {
+  /** @type {{ x: number, y: number, dx: number, sideways: boolean|null } | null} */
+  let start = null;
+  let open = false;
+  const place = (/** @type {number} */ x, /** @type {boolean} */ animate) => {
+    slide.style.transition = animate ? 'transform 0.18s ease' : 'none';
+    slide.style.transform = x ? `translateX(${x}px)` : '';
+  };
+  // The Delete is only shown while swiping or open, so its edge never shows behind a resting row.
+  const handle = { close: () => { open = false; place(0, true); setTimeout(() => { if (!open) row.classList.remove('swiping'); }, 200); } };
+  row.addEventListener('touchstart', (e) => {
+    if (swipedOpen && swipedOpen !== handle) swipedOpen.close();
+    start = { x: e.touches[0].clientX, y: e.touches[0].clientY, dx: 0, sideways: null };
+  }, { passive: true });
+  row.addEventListener('touchmove', (e) => {
+    if (!start) return;
+    const dx = e.touches[0].clientX - start.x;
+    const dy = e.touches[0].clientY - start.y;
+    if (start.sideways === null && (Math.abs(dx) > 8 || Math.abs(dy) > 8)) start.sideways = Math.abs(dx) > Math.abs(dy);
+    if (!start.sideways) return;
+    row.classList.add('swiping');
+    start.dx = dx;
+    place(Math.max(-DELETE_WIDTH, Math.min(0, (open ? -DELETE_WIDTH : 0) + dx)), false);
+  }, { passive: true });
+  row.addEventListener('touchend', () => {
+    if (start?.sideways) {
+      open = (open ? -DELETE_WIDTH : 0) + start.dx < -DELETE_WIDTH / 2;
+      place(open ? -DELETE_WIDTH : 0, true);
+      swipedOpen = open ? handle : null;
+      if (!open) setTimeout(() => { if (!open) row.classList.remove('swiping'); }, 200);
+    }
+    start = null;
+  });
+  // A tap on a swiped-open row closes it instead of opening the item.
+  slide.addEventListener('click', (e) => { if (open) { e.stopPropagation(); handle.close(); } }, true);
+  const del = /** @type {HTMLButtonElement} */ (row.querySelector('.list-item-delete'));
+  del.addEventListener('click', () => { handle.close(); onDelete(); });
 }
 
 /**
@@ -269,11 +340,19 @@ function itemRow(screen, item, today) {
     item.notes ?? '',
     done && item.done_by ? `ticked by ${item.done_by}` : '',
   ].filter(Boolean).join(' · ');
-  return el('li', { class: `list-item${done ? ' done' : ''}${isUnsaved(item.item_id) ? ' saving' : ''}` },
-    el('button', { class: 'tick', type: 'button', 'aria-pressed': String(done), 'aria-label': done ? 'Untick' : 'Tick', onclick: () => toggle(screen, item) }),
+  const plain = isNotes(screen.data.lists.find((l) => l.list_id === item.list_id));
+  const slide = el('div', { class: 'list-item-slide' },
+    // A notes list has no tick boxes (ADR-114).
+    plain ? '' : el('button', { class: 'tick', type: 'button', 'aria-pressed': String(done), 'aria-label': done ? 'Untick' : 'Tick', onclick: () => toggle(screen, item) }),
     el('div', { class: 'list-item-body', onclick: () => itemSheet(screen, item) },
       el('div', { class: 'list-item-text' }, item.text),
       meta ? el('div', { class: `details${overdue ? ' overdue' : ''}` }, meta) : ''));
+  const row = el('li', { class: `list-item${done && !plain ? ' done' : ''}${plain ? ' plain-line' : ''}${isUnsaved(item.item_id) ? ' saving' : ''}` },
+    el('button', { class: 'list-item-delete', type: 'button' }, 'Delete'), slide);
+  swipeToDelete(row, slide, () => {
+    removeItem(screen, item).then((r) => { if (!r.ok) toast(`Could not delete "${item.text}": ${r.errors.map((e) => e.message).join('; ')}`); });
+  });
+  return row;
 }
 
 /**
@@ -289,10 +368,12 @@ export function listsOverview(screen) {
     const items = screen.data.items.filter((i) => i.list_id === l.list_id);
     const done = items.filter((i) => i.status === 'DONE').length;
     const event = l.event_id ? events.get(l.event_id) : undefined;
+    const plain = isNotes(l);
+    const count = plain ? `${items.length} line${items.length === 1 ? '' : 's'}` : `${done} of ${items.length} done`;
     return el('button', { class: 'list-card', type: 'button', onclick: () => screen.open(l.list_id) },
       el('div', { class: 'list-card-title' }, l.title),
-      el('div', { class: 'details' }, [items.length ? `${done} of ${items.length} done` : 'empty', eventText(event)].filter(Boolean).join(' · ')),
-      items.length ? el('div', { class: 'progress' }, el('span', { style: { width: `${Math.round((done / items.length) * 100)}%` } })) : '');
+      el('div', { class: 'details' }, [items.length ? count : 'empty', plain ? 'notes' : '', eventText(event)].filter(Boolean).join(' · ')),
+      items.length && !plain ? el('div', { class: 'progress' }, el('span', { style: { width: `${Math.round((done / items.length) * 100)}%` } })) : '');
   };
   return el('div', {},
     el('button', { class: 'wide-button', type: 'button', onclick: () => listSheet(screen) }, '+ New list'),
@@ -310,19 +391,25 @@ export function listDetail(screen, listId, today) {
   const list = screen.data.lists.find((l) => l.list_id === listId);
   if (!list) return el('div', {}, el('p', { class: 'muted' }, 'This list is not here any more.'), el('button', { class: 'link', type: 'button', onclick: () => screen.open(null) }, '‹ All lists'));
   const items = screen.data.items.filter((i) => i.list_id === listId);
-  // Newest first, so what was just added is at the top (RT, 2026-09-25).
-  const open = items.filter((i) => i.status !== 'DONE').reverse();
-  const done = items.filter((i) => i.status === 'DONE');
+  const plain = isNotes(list);
+  // In the order added, first at the top, with the add box below them (RT, 2026-10-09; ADR-114 replaces newest first).
+  // A notes list shows every line; a checklist folds its done items away.
+  const open = plain ? items : items.filter((i) => i.status !== 'DONE');
+  const done = plain ? [] : items.filter((i) => i.status === 'DONE');
   const event = list.event_id ? screen.data.events.find((e) => e.event_id === list.event_id) : undefined;
 
-  const newText = /** @type {HTMLInputElement} */ (el('input', { type: 'text', placeholder: 'Add an item', enterkeyhint: 'done', class: 'add-input' }));
+  const newText = /** @type {HTMLInputElement} */ (el('input', { type: 'text', placeholder: plain ? 'Add a line' : 'Add an item', enterkeyhint: 'done', class: 'add-input' }));
   const add = () => {
     const text = newText.value.trim();
     if (!text) { newText.focus(); return; }
     newText.value = '';
     addItems(screen, list, [text]);
-    // Ready for the next item, as when writing a shopping list.
-    setTimeout(() => /** @type {HTMLInputElement|null} */ (document.querySelector('.add-input'))?.focus(), 0);
+    // Ready for the next item, as when writing a shopping list; the box stays in view below the new one.
+    setTimeout(() => {
+      const box = /** @type {HTMLInputElement|null} */ (document.querySelector('.add-input'));
+      box?.focus();
+      box?.scrollIntoView({ block: 'nearest' });
+    }, 0);
   };
   newText.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } });
   // Pasting several lines (e.g. from a note) adds one item per line.
@@ -336,15 +423,18 @@ export function listDetail(screen, listId, today) {
 
   return el('div', { class: 'list-detail' },
     el('button', { class: 'link back', type: 'button', onclick: () => screen.open(null) }, '‹ All lists'),
-    el('h2', { class: 'list-title' }, list.title, list.status === 'ARCHIVED' ? el('span', { class: 'tag' }, 'archived') : ''),
+    // Tap the name to rename (RT, 2026-10-09).
+    el('h2', { class: 'list-title link-title', onclick: () => listSheet(screen, list) }, list.title, el('span', { class: 'edit-mark', 'aria-hidden': 'true' }, ' ✎'),
+      list.status === 'ARCHIVED' ? el('span', { class: 'tag' }, 'archived') : ''),
     event ? el('div', { class: 'details' }, `For ${eventText(event)}`) : '',
+    open.length ? el('ul', { class: 'list-items' }, open.map((i) => itemRow(screen, i, today))) : el('p', { class: 'muted' }, items.length ? 'All done.' : `Nothing on this list yet.`),
     el('div', { class: 'add-row' }, newText, el('button', { class: 'primary', type: 'button', onclick: add }, 'Add')),
-    el('button', { class: 'link add-several', type: 'button', onclick: () => severalSheet(screen, list) }, '+ Add several at once'),
-    open.length ? el('ul', { class: 'list-items' }, open.map((i) => itemRow(screen, i, today))) : el('p', { class: 'muted' }, items.length ? 'All done.' : 'Nothing on this list yet.'),
+    el('button', { class: 'link add-several', type: 'button', onclick: () => severalSheet(screen, list) }, plain ? '+ Add several lines at once' : '+ Add several at once'),
+    open.length ? el('p', { class: 'muted small swipe-hint' }, 'Swipe an item left to delete it.') : '',
     done.length ? el('details', { class: 'done-items' }, el('summary', { class: 'muted' }, `Done (${done.length})`),
       el('ul', { class: 'list-items' }, done.map((i) => itemRow(screen, i, today)))) : '',
     el('div', { class: 'row-actions list-actions' },
-      el('button', { class: 'link', type: 'button', onclick: () => listSheet(screen, list) }, 'Rename or attach to an event'),
+      el('button', { class: 'link', type: 'button', onclick: () => listSheet(screen, list) }, 'Rename, change kind or attach to an event'),
       el('button', { class: 'link', type: 'button', onclick: async (/** @type {Event} */ ev) => {
         const status = list.status === 'ACTIVE' ? 'ARCHIVED' : 'ACTIVE';
         const r = await busy(/** @type {HTMLButtonElement} */ (ev.currentTarget), () => screen.ctx.call('lists.setStatus', { list_id: listId, status }));
