@@ -100,6 +100,19 @@ main { padding: 8px 12px calc(76px + env(safe-area-inset-bottom)); max-width: 82
 .check input { width: 20px; height: 20px; }
 /* School dates found in a PDF, to check before saving (ADR-106). */
 .school-dates { display: flex; flex-direction: column; gap: 10px; }
+/* Milestones (ADR-112): months down the side, one column per person (RT, G, C, R). */
+.ms-grid { display: flex; flex-direction: column; }
+/* Room below December so the + button never covers it. */
+.milestones { padding-bottom: 72px; }
+.ms-month { display: grid; grid-template-columns: 2.6em repeat(4, minmax(0, 1fr)); column-gap: 4px; row-gap: 4px; padding: 6px 0; border-bottom: 1px solid var(--line); min-height: 34px; }
+.ms-head { position: sticky; top: 0; background: var(--bg); z-index: 1; font-size: 13px; font-weight: 700; color: var(--muted); }
+.ms-name { text-align: center; }
+.ms-label { font-size: 13px; font-weight: 700; color: var(--muted); align-self: start; padding-top: 4px; }
+.ms-col { border-left: 1px dashed var(--line); }
+.ms-box { font: inherit; font-size: 12px; font-weight: 600; line-height: 1.25; text-align: center; padding: 5px 4px; border: 0; border-radius: 8px; overflow-wrap: anywhere; cursor: pointer; z-index: 0; }
+/* A box broken around someone not in it: the side facing the gap is square and dashed. */
+.ms-box.open-right { border-top-right-radius: 0; border-bottom-right-radius: 0; border-right: 2px dashed currentColor; }
+.ms-box.open-left { border-top-left-radius: 0; border-bottom-left-radius: 0; border-left: 2px dashed currentColor; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chips button { border: 1px solid var(--line); background: var(--bg); border-radius: 16px; padding: 6px 14px; font-size: 15px; cursor: pointer; }
 .chips button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--bg); font-weight: 600; }

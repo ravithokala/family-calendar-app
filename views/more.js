@@ -24,7 +24,7 @@ import { loadTimes } from '../app/state.js';
  *   sources: import('./sources.js').SourceSummary[], pending: number, periods: import('./schools.js').Period[],
  *   undoable?: Record<string, string>, removed?: import('./removed.js').Removed,
  *   notices?: Array<{ school_id: string, school_name: string|null, person: string|null, last_date: string }> }} data
- * @param {{ openReview: () => void, today: string }} nav
+ * @param {{ openReview: () => void, openMilestones?: () => void, today: string }} nav
  */
 export function moreView(ctx, data, nav) {
   const messages = el('div', { class: 'messages' });
@@ -56,6 +56,10 @@ export function moreView(ctx, data, nav) {
       el('button', { class: 'wide-button', type: 'button', onclick: nav.openReview },
         data.pending ? `Review ${data.pending} waiting item${data.pending === 1 ? '' : 's'}` : 'Review: nothing waiting'),
       recentSources(ctx, data.sources)),
+    el('section', {},
+      el('div', { class: 'section-head' }, el('h2', {}, 'Milestones')),
+      // The family's year by month and person (ADR-112).
+      el('button', { class: 'wide-button', type: 'button', onclick: () => nav.openMilestones?.() }, `🏅 Milestones ${nav.today.slice(0, 4)}`)),
     el('section', {},
       el('div', { class: 'section-head' }, el('h2', {}, 'Printed calendars')),
       el('button', { class: 'wide-button', type: 'button', onclick: () => printSheet(ctx, nav.today) }, '🖨 Print a month (PDFs)')),

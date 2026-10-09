@@ -35,7 +35,7 @@ function refreshFailed(e, saved, savedView) {
  */
 export async function showMore(mine, force = false, fresh = false) {
   const saved = cache.read('more');
-  const draw = (/** @type {any} */ data) => moreView(formContext(), data, { openReview: () => go({ screen: 'review' }), today: today() });
+  const draw = (/** @type {any} */ data) => moreView(formContext(), data, { openReview: () => go({ screen: 'review' }), openMilestones: () => go({ screen: 'milestones', date: today() }), today: today() });
   const savedView = saved ? drawSaved(() => draw(saved.data)) : null;
   if (saved && savedView && !force && Date.now() - saved.at < FRESH_MS) {
     $('main').replaceChildren(savedView);

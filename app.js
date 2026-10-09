@@ -14,6 +14,7 @@ import { formContext } from './app/context.js';
 import { showCalendar } from './app/calendar.js';
 import { showLists } from './app/lists.js';
 import { showMore, showReview } from './app/more.js';
+import { showMilestones } from './app/milestones.js';
 import { showSignedIn } from './app/chrome.js';
 import { $, app, go, readState, frame, today, nextTurn, showError, routinesHidden } from './app/state.js';
 
@@ -47,10 +48,11 @@ async function show(force = false, fresh = false) {
   $('next').hidden = f.next === null;
   $('prev').onclick = () => f.prev && go({ date: f.prev });
   $('next').onclick = () => f.next && go({ date: f.next });
-  $('filters').hidden = s.screen === 'more' || s.screen === 'review' || s.screen === 'lists';
+  $('filters').hidden = s.screen === 'more' || s.screen === 'review' || s.screen === 'lists' || s.screen === 'milestones';
   if (s.screen === 'more') return showMore(mine, force, fresh);
   if (s.screen === 'lists') return showLists(mine, force, fresh);
   if (s.screen === 'review') return showReview(mine);
+  if (s.screen === 'milestones') return showMilestones(mine, s);
   return showCalendar(mine, s, f, force, fresh);
 }
 app.show = show;

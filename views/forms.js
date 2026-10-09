@@ -4,6 +4,7 @@ import { el, longDate } from '../dom.js';
 import { openSheet, showIssues } from './sheet.js';
 import { field, input, select, checkbox, chips, saveButton, busy } from './fields.js';
 import { timeText } from './parts.js';
+import { milestoneSheet } from './milestones.js';
 
 /**
  * Adding and editing from the phone (ADR-081). Every save goes to the same server services as
@@ -133,6 +134,11 @@ export function eventDetails(ctx, theme, item, date) {
       `☑ ${l.title} · ${l.total ? `${l.done} of ${l.total} done` : 'empty'}`)),
     el('div', { class: 'actions' },
       el('button', { class: 'primary', type: 'button', onclick: () => { sheet.close(); eventSheet(ctx, { item }); } }, 'Edit'),
+      // A moment worth keeping, e.g. a grading or a trip (ADR-112): title, day and people filled in, linked.
+      el('button', { class: 'secondary', type: 'button', onclick: () => {
+        sheet.close();
+        milestoneSheet(ctx, { title: item.title, date: e?.start_date ?? date, people: item.participants, event_id: item.event_id, event_title: item.title });
+      } }, 'Add as milestone'),
       el('button', { class: 'danger', type: 'button', onclick: async (/** @type {Event} */ ev) => {
         // No "are you sure?": the message offers Undo instead (ADR-087).
         const r = await busy(/** @type {HTMLButtonElement} */ (ev.currentTarget), () => ctx.call('events.cancel', { event_id: item.event_id }));

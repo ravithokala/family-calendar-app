@@ -10,13 +10,13 @@ import { lastTiming } from '../api.js';
  * address, so Back works), the header's small helpers, and the guard against an older request
  * finishing after a newer one.
  *
- * @typedef {'today' | 'month' | 'week' | 'day' | 'lists' | 'more' | 'review'} Screen
+ * @typedef {'today' | 'month' | 'week' | 'day' | 'lists' | 'more' | 'review' | 'milestones'} Screen
  * @typedef {{ screen: Screen, date: string, view: string, list: string|null }} State
  */
 
 export const $ = (/** @type {string} */ id) => /** @type {HTMLElement} */ (document.getElementById(id));
 
-export const SCREENS = /** @type {Screen[]} */ (['today', 'month', 'week', 'day', 'lists', 'more', 'review']);
+export const SCREENS = /** @type {Screen[]} */ (['today', 'month', 'week', 'day', 'lists', 'more', 'review', 'milestones']);
 /**
  * The bottom bar (RT, 2026-09-24: Lists replaces Day). Day is reached by tapping a day in Month or
  * Week; Review from the badge and More.
@@ -63,6 +63,11 @@ export function frame(s) {
   if (s.screen === 'more') return { from: '', to: '', title: 'More', prev: null, next: null };
   if (s.screen === 'review') return { from: '', to: '', title: 'Review', prev: null, next: null };
   if (s.screen === 'lists') return { from: '', to: '', title: 'Lists', prev: null, next: null };
+  // Milestones (ADR-112): one year at a time; ‹ › step a year.
+  if (s.screen === 'milestones') {
+    const y = Number(s.date.slice(0, 4));
+    return { from: '', to: '', title: `Milestones ${y}`, prev: `${y - 1}-01-01`, next: `${y + 1}-01-01` };
+  }
   if (s.screen === 'month') {
     const start = `${s.date.slice(0, 7)}-01`;
     return { ...monthRange(start), title: monthTitle(start), prev: addMonths(start, -1), next: addMonths(start, 1) };

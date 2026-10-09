@@ -7,6 +7,7 @@ import { currentLists, addOnLists } from './lists.js';
 import * as cache from '../cache.js';
 import { el, addDays } from '../dom.js';
 import { eventSheet, routineSheet, reminderSheet } from '../views/forms.js';
+import { milestoneSheet } from '../views/milestones.js';
 import { captureBox } from '../views/capture.js';
 import { openSheet, toast } from '../views/sheet.js';
 import { VERSION } from '../version.js';
@@ -56,7 +57,7 @@ function enableSwipe() {
     const from = start;
     start = null;
     const s = readState();
-    if (!from || !['month', 'week', 'day', 'today'].includes(s.screen)) return;
+    if (!from || !['month', 'week', 'day', 'today', 'milestones'].includes(s.screen)) return;
     const end = e.changedTouches[0];
     const dx = end.clientX - from.x;
     const dy = end.clientY - from.y;
@@ -129,13 +130,16 @@ export function showSignedIn() {
     const s = readState();
     // On Lists, + is about lists (RT, 2026-09-26: it opened a new event).
     if (s.screen === 'lists') { addOnLists(); return; }
+    // On Milestones, + adds one (ADR-112).
+    if (s.screen === 'milestones') { milestoneSheet(ctx); return; }
     const date = s.screen === 'day' ? s.date : today();
     const menu = openSheet('Add', el('div', { class: 'add-menu' },
       captureBox(ctx, () => menu.close(), user()),
       el('div', { class: 'or muted small' }, 'or add by form'),
       el('button', { type: 'button', onclick: () => { menu.close(); eventSheet(ctx, { date }); } }, 'Event'),
       el('button', { type: 'button', onclick: () => { menu.close(); routineSheet(ctx); } }, 'Weekly routine'),
-      el('button', { type: 'button', onclick: () => { menu.close(); reminderSheet(ctx); } }, 'Reminder')));
+      el('button', { type: 'button', onclick: () => { menu.close(); reminderSheet(ctx); } }, 'Reminder'),
+      el('button', { type: 'button', onclick: () => { menu.close(); milestoneSheet(ctx); } }, 'Milestone')));
   };
   window.addEventListener('hashchange', () => app.show());
   // A phone keeps the app open in the background for hours: coming back redraws from the saved copy
