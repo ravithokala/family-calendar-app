@@ -8,9 +8,10 @@
  * @typedef {{ x: number, y: number, w: number, h: number }} Box
  * @typedef {Box & { file_id: string, thumb_id: string, crop: Box, low_res: boolean }} PosterPhoto
  * @typedef {Box & { kind: 'photo'|'plain', short: boolean, milestone_id: string, title: string, when: string, highlight: boolean,
- *   icon: string|null, tone: string, people: Array<{ name: string, tone: string }>, photos: PosterPhoto[] }} PosterTile
+ *   icon: string|null, tone: string, people: Array<{ name: string, tone: string }>, photos: PosterPhoto[], caption: Box|null }} PosterTile
+ *   caption: below the window (Mounted, ADR-117), else null (over the photo)
  * @typedef {{ code: string, message: string, suggest?: string }} PosterProblem
- * @typedef {{ size: string, orientation: string, width: number, height: number, margin: number, gutter: number,
+ * @typedef {{ size: string, orientation: string, style?: string, width: number, height: number, margin: number, gutter: number,
  *   header: Box & { year: number, line: string }, columns: number, rows: number, tiles: PosterTile[], problems: PosterProblem[] }} Poster
  * @typedef {(photo: PosterPhoto) => Promise<CanvasImageSource & { width: number, height: number } | null>} PhotoSource
  */
@@ -19,6 +20,17 @@ const FONT = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, 
 const INK = '#22252A';
 const MUTED = '#70757D';
 const RADIUS = 1.6; // mm
+
+/**
+ * Mount colours for the Mounted style (ADR-117): the board, the bevel round each window, and the text on it.
+ * @typedef {{ board: string, bevel: string, ink: string, muted: string }} Mount
+ * @type {Record<string, Mount>}
+ */
+export const MOUNTS = {
+  WHITE: { board: '#FFFFFF', bevel: '#E2DED6', ink: INK, muted: MUTED },
+  CREAM: { board: '#F4EEE2', bevel: '#E0D6C3', ink: '#2E2A24', muted: '#7B7266' },
+  BLACK: { board: '#161616', bevel: '#5C5C5C', ink: '#F3F3F3', muted: '#B4B4B4' },
+};
 
 /**
  * Text cut to fit a width, over at most this many lines, with … when cut.
@@ -134,6 +146,41 @@ function caption(g, t, theme, area, size, lines, colour) {
   tags(g, t, theme, area.x + pad + g.measureText(t.when).width + small * 0.6, y, small * 0.9, area.x + area.w - pad);
 }
 
+/**
+ * A caption on the mount below its window (Mounted, ADR-117): the title, then when and the name tags.
+ * @param {CanvasRenderingContext2D} g
+ * @param {PosterTile} t
+ * @param {import('./views/parts.js').Theme} theme
+ * @param {Box} box  the space below the window
+ * @param {Mount} mount
+ */
+function labelBelow(g, t, theme, box, mount) {
+  const size = box.h * 0.34;
+  g.textBaseline = 'top';
+  g.font = `700 ${size}px ${FONT}`;
+  g.fillStyle = mount.ink;
+  g.fillText(wrap(g, t.title, box.w, 1)[0] ?? '', box.x, box.y + box.h * 0.14);
+  const small = size * 0.82;
+  const y = box.y + box.h * 0.14 + size * 1.28;
+  g.font = `600 ${small}px ${FONT}`;
+  g.fillStyle = mount.muted;
+  g.fillText(t.when, box.x, y + small * 0.12);
+  tags(g, t, theme, box.x + g.measureText(t.when).width + small * 0.6, y, small * 0.88, box.x + box.w);
+}
+
+/**
+ * The bevel round a window cut in the mount: a thin line just outside the photo.
+ * @param {CanvasRenderingContext2D} g
+ * @param {Box} b
+ * @param {Mount} mount
+ * @param {number} width  mm
+ */
+function bevel(g, b, mount, width) {
+  g.strokeStyle = mount.bevel;
+  g.lineWidth = width;
+  g.strokeRect(b.x - width / 2, b.y - width / 2, b.w + width, b.h + width);
+}
+
 /** Title size for a tile, from its shorter side (mm). @param {PosterTile} t */
 const titleSize = (t) => Math.max(2.4, Math.min(t.highlight ? 6 : 4.4, Math.min(t.w, t.short ? t.h * 2 : t.h) * 0.075));
 
@@ -142,12 +189,15 @@ const titleSize = (t) => Math.max(2.4, Math.min(t.highlight ? 6 : 4.4, Math.min(
  * @param {PosterTile} t
  * @param {import('./views/parts.js').Theme} theme
  * @param {PhotoSource} source
+ * @param {Mount|null} mount  Mounted: windows with a bevel and the caption below; null: Mosaic
+ * @param {number} line  the bevel's width (mm)
  */
-async function photoTile(g, t, theme, source) {
+async function photoTile(g, t, theme, source, mount, line) {
   for (const p of t.photos) {
     const img = await source(p);
     g.save();
-    rounded(g, p, RADIUS);
+    // A mount's windows are cut square; mosaic tiles have soft corners.
+    if (mount) { g.beginPath(); g.rect(p.x, p.y, p.w, p.h); } else rounded(g, p, RADIUS);
     g.clip();
     if (img) {
       g.drawImage(img, p.crop.x * img.width, p.crop.y * img.height, p.crop.w * img.width, p.crop.h * img.height, p.x, p.y, p.w, p.h);
@@ -156,7 +206,9 @@ async function photoTile(g, t, theme, source) {
       g.fillRect(p.x, p.y, p.w, p.h);
     }
     g.restore();
+    if (mount) bevel(g, p, mount, line);
   }
+  if (mount && t.caption) { labelBelow(g, t, theme, t.caption, mount); return; }
   // The caption strip across the bottom of the cover (the largest photo on a highlight with several).
   const size = titleSize(t);
   const height = size * (1.18 * 2 + 1.6);
@@ -176,10 +228,25 @@ async function photoTile(g, t, theme, source) {
  * @param {CanvasRenderingContext2D} g
  * @param {PosterTile} t
  * @param {import('./views/parts.js').Theme} theme
+ * @param {Mount|null} mount
+ * @param {number} line
  */
-async function plainTile(g, t, theme) {
+async function plainTile(g, t, theme, mount, line) {
   const tone = theme.tones[t.tone] ?? { background: '#F4F5F7', text: INK };
   g.fillStyle = tone.background;
+  if (mount && t.caption) {
+    // In a mount: the coloured card fills its window with its icon in the middle; the caption is below.
+    g.fillRect(t.x, t.y, t.w, t.h);
+    bevel(g, t, mount, line);
+    const paths = t.icon ? theme.icons[t.icon] : undefined;
+    if (paths) {
+      const side = Math.min(t.w, t.h) * 0.5;
+      const img = await iconImage(paths, tone.text);
+      if (img) g.drawImage(img, t.x + (t.w - side) / 2, t.y + (t.h - side) / 2, side, side);
+    }
+    labelBelow(g, t, theme, t.caption, mount);
+    return;
+  }
   rounded(g, t, RADIUS);
   g.fill();
   const size = titleSize(t);
@@ -201,16 +268,20 @@ async function plainTile(g, t, theme) {
  * @param {Poster} poster
  * @param {import('./views/parts.js').Theme} theme
  * @param {PhotoSource} source  each photo's image (the small copy for a preview)
+ * @param {string} [mountColour]  WHITE, CREAM or BLACK, for the Mounted style (ADR-117)
  */
-export async function drawPoster(canvas, poster, theme, source) {
+export async function drawPoster(canvas, poster, theme, source, mountColour = 'WHITE') {
   const g = /** @type {CanvasRenderingContext2D} */ (canvas.getContext('2d'));
   const scale = canvas.width / poster.width;
   g.setTransform(scale, 0, 0, scale, 0, 0);
-  g.fillStyle = '#FFFFFF';
+  const mount = poster.style === 'MOUNTED' ? MOUNTS[mountColour] ?? MOUNTS.WHITE : null;
+  // The bevel's width grows a little with the page (about 1 mm on A3).
+  const line = Math.min(poster.width, poster.height) / 297;
+  g.fillStyle = mount ? mount.board : '#FFFFFF';
   g.fillRect(0, 0, poster.width, poster.height);
   // The header: the year, and the line if there is one.
   const h = poster.header;
-  g.fillStyle = INK;
+  g.fillStyle = mount ? mount.ink : INK;
   g.textBaseline = 'middle';
   g.font = `800 ${h.h * 0.62}px ${FONT}`;
   const year = String(h.year);
@@ -218,11 +289,11 @@ export async function drawPoster(canvas, poster, theme, source) {
   if (h.line) {
     const at = h.x + g.measureText(year).width + h.h * 0.35;
     g.font = `500 ${h.h * 0.3}px ${FONT}`;
-    g.fillStyle = MUTED;
+    g.fillStyle = mount ? mount.muted : MUTED;
     g.fillText(wrap(g, h.line, h.x + h.w - at, 1)[0] ?? '', at, h.y + h.h / 2 + h.h * 0.06);
   }
   for (const t of poster.tiles) {
-    if (t.kind === 'photo') await photoTile(g, t, theme, source);
-    else await plainTile(g, t, theme);
+    if (t.kind === 'photo') await photoTile(g, t, theme, source, mount, line);
+    else await plainTile(g, t, theme, mount, line);
   }
 }

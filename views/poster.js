@@ -17,11 +17,11 @@ const KEY = 'fc.poster';
 function remembered() {
   try {
     const saved = JSON.parse(localStorage.getItem(KEY) ?? 'null');
-    if (saved && typeof saved.size === 'string' && typeof saved.orientation === 'string') return saved;
+    if (saved && typeof saved.size === 'string' && typeof saved.orientation === 'string') return { style: 'MOSAIC', mount: 'WHITE', ...saved };
   } catch (e) { /* first time, or storage blocked */ }
-  return { size: 'A3', orientation: 'PORTRAIT' };
+  return { size: 'A3', orientation: 'PORTRAIT', style: 'MOSAIC', mount: 'WHITE' };
 }
-/** @param {{ size: string, orientation: string }} choice */
+/** @param {{ size: string, orientation: string, style: string, mount: string }} choice */
 function remember(choice) {
   try { localStorage.setItem(KEY, JSON.stringify(choice)); } catch (e) { /* this visit only */ }
 }
@@ -105,6 +105,10 @@ export function posterSheet(ctx, year) {
   const size = select(start.size, /** @type {Array<[string, string]>} */ (SIZES));
   const orientation = select(start.orientation, [['PORTRAIT', 'Portrait (tall)'], ['LANDSCAPE', 'Landscape (wide)']]);
   const line = input('text', null, { placeholder: 'optional, e.g. Our year', maxlength: '80' });
+  // ADR-117: photos close together, or in windows in a mount of a chosen colour.
+  const style = select(start.style, [['MOSAIC', 'Mosaic (close together)'], ['MOUNTED', 'Mounted (in a mount, like a frame)']]);
+  const mount = select(start.mount, [['WHITE', 'White'], ['CREAM', 'Cream'], ['BLACK', 'Black']]);
+  const mountRow = field('Mount colour', mount.node);
   const status = el('p', { class: 'muted small poster-status' }, 'Laying out…');
   const notes = el('div', { class: 'poster-notes' });
   const canvas = /** @type {HTMLCanvasElement} */ (el('canvas', { class: 'poster-preview', 'aria-label': `Preview of the ${year} poster` }));
@@ -144,13 +148,14 @@ export function posterSheet(ctx, year) {
         done += 1;
         progress.textContent = `Photo ${done} of ${total}…`;
         return img;
-      });
+      }, mount.get() ?? 'WHITE');
       progress.textContent = 'Making the JPEG…';
       const blob = await new Promise((resolve) => big.toBlob(resolve, 'image/jpeg', 0.92));
       if (!blob) throw new Error('this phone could not make a picture that large; try a smaller size');
       if (mine !== asked) return; // the size was changed meanwhile
       const label = SIZES.find(([k]) => k === poster.size)?.[1] ?? poster.size;
-      const name = `Milestones ${year} ${label.replace('″', 'in')} ${poster.orientation === 'LANDSCAPE' ? 'landscape' : 'portrait'}.jpg`;
+      const look = poster.style === 'MOUNTED' ? ` mounted ${(mount.get() ?? 'WHITE').toLowerCase()}` : '';
+      const name = `Milestones ${year} ${label.replace('″', 'in')} ${poster.orientation === 'LANDSCAPE' ? 'landscape' : 'portrait'}${look}.jpg`;
       const result = el('p', { class: 'muted small' }, `Ready: ${px.width} × ${px.height} pixels, ${megabytes(/** @type {Blob} */ (blob).size)}.`);
       saveArea.replaceChildren(
         el('button', { class: 'primary wide-button poster-share', type: 'button', 'data-bytes': String(/** @type {Blob} */ (blob).size),
@@ -170,11 +175,12 @@ export function posterSheet(ctx, year) {
     const mine = ++asked;
     shown = null;
     saveArea.replaceChildren();
-    const choice = { size: size.get() ?? 'A3', orientation: orientation.get() ?? 'PORTRAIT' };
+    const choice = { size: size.get() ?? 'A3', orientation: orientation.get() ?? 'PORTRAIT', style: style.get() ?? 'MOSAIC', mount: mount.get() ?? 'WHITE' };
     remember(choice);
+    mountRow.hidden = choice.style !== 'MOUNTED';
     status.textContent = 'Laying out…';
     status.hidden = false;
-    const r = await ctx.call('milestones.poster', { year, ...choice, line: line.get() ?? '' });
+    const r = await ctx.call('milestones.poster', { year, size: choice.size, orientation: choice.orientation, style: choice.style, line: line.get() ?? '' });
     if (mine !== asked) return;
     if (!r.ok) { status.textContent = `Could not lay out the poster: ${r.errors.map((e) => e.message).join('; ')}`; return; }
     /** @type {import('../poster.js').Poster} */
@@ -186,7 +192,7 @@ export function posterSheet(ctx, year) {
     canvas.width = width;
     canvas.height = Math.round(width * (poster.height / poster.width));
     status.textContent = 'Drawing the preview…';
-    await drawPoster(canvas, poster, /** @type {any} */ (app.theme), smallCopy);
+    await drawPoster(canvas, poster, /** @type {any} */ (app.theme), smallCopy, choice.mount);
     if (mine !== asked) return;
     status.hidden = true;
     canvas.dataset.tiles = String(poster.tiles.length);
@@ -197,10 +203,13 @@ export function posterSheet(ctx, year) {
   let typing = 0;
   size.node.addEventListener('change', refresh);
   orientation.node.addEventListener('change', refresh);
+  style.node.addEventListener('change', refresh);
+  mount.node.addEventListener('change', refresh);
   line.node.addEventListener('input', () => { clearTimeout(typing); typing = window.setTimeout(refresh, 600); });
 
   const form = el('div', { class: 'form' },
     el('div', { class: 'row' }, field('Size', size.node), field('Shape', orientation.node)),
+    el('div', { class: 'row' }, field('Style', style.node), mountRow),
     field('Line beside the year', line.node),
     notes, status, canvas, saveArea,
     el('p', { class: 'muted small' }, 'In date order; highlights get a big tile, with up to 2 more photos ticked "On poster". The preview is drawn from small copies; the print file from the full photos.'));
