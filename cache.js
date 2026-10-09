@@ -1,6 +1,7 @@
 // @ts-check
 
 import { copyTooOld } from './freshness.js';
+import { forgetPhotos } from './photos.js';
 
 /**
  * The last answer for each screen, kept on this phone so a screen draws at once and refreshes
@@ -54,6 +55,8 @@ export function write(key, data) {
 }
 
 export function clear() {
+  // Milestone photos kept on this phone go with the saved answers (ADR-113).
+  forgetPhotos();
   try {
     Object.keys(localStorage).filter((k) => k.startsWith(ROOT)).forEach((k) => localStorage.removeItem(k));
   } catch (e) { /* ignore */ }

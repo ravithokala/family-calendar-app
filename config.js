@@ -20,7 +20,7 @@ export const CONFIG = Object.freeze({
    * applies once.
    */
   waits: Object.freeze({
-    reads: Object.freeze(['app.days', 'app.more', 'app.search', 'lists.all', 'meta.get', 'review.inbox', 'system.check', 'sources.prompt', 'capture.parse', 'sources.findPdf', 'milestones.year']),
-    slow: Object.freeze(['print.generateMonth', 'sources.addPdf', 'household.sync']),
+    reads: Object.freeze(['app.days', 'app.more', 'app.search', 'lists.all', 'meta.get', 'review.inbox', 'system.check', 'sources.prompt', 'capture.parse', 'sources.findPdf', 'milestones.year', 'milestones.photo']),
+    slow: Object.freeze(['print.generateMonth', 'sources.addPdf', 'household.sync', 'milestones.addPhoto']),
   }),
 });
