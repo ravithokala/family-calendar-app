@@ -22,6 +22,15 @@ const dayText = (days) => days.map((d) => d.charAt(0) + d.slice(1, 3).toLowerCas
 const timeText = (start, end) => (start ? `${start}${end ? `–${end}` : ''}` : '');
 
 /**
+ * The time a changed routine's sessions will have: the change's own, else the activity's usual time
+ * (as sessions are made), else none (RT, 2026-10-25: a change without a time was refused).
+ * @param {Activity} a
+ * @param {{ start_time: string|null, end_time: string|null }} s
+ */
+const sessionTime = (a, s) => (s.start_time ? timeText(s.start_time, s.end_time)
+  : a.default_start_time ? `${timeText(a.default_start_time, a.default_end_time)} (its usual time)` : 'no set time');
+
+/**
  * The routine's schedules still running on or after today, earliest first.
  * @param {Activity} a
  * @param {Schedule[]} schedules
@@ -151,9 +160,9 @@ function changeSheet(ctx, a, current, today) {
   const form = el('div', {},
     field('From', f.from.node),
     field('Days', f.days.node),
-    el('div', { class: 'row' }, field('Start', f.start.node), field('End', f.end.node)),
+    el('div', { class: 'row' }, field('Start (optional)', f.start.node), field('End (optional)', f.end.node)),
     field('Where', f.location.node),
-    el('p', { class: 'muted small' }, 'Sessions before this date stay as they were.'));
+    el('p', { class: 'muted small' }, 'Sessions before this date stay as they were. Leave the times empty for a routine with no set time.'));
   const payload = () => ({
     activity_id: a.activity_id, from: f.from.get(), start_time: f.start.get(), end_time: f.end.get(), location: f.location.get(),
     day_of_week: f.days.get().map((d) => ctx.meta.weekdays.find((/** @type {string} */ w) => w.startsWith(d)) ?? d),
@@ -163,7 +172,7 @@ function changeSheet(ctx, a, current, today) {
     form,
     preview: () => ctx.call('routines.change', { ...payload(), dry_run: true }),
     describe: (d) => el('div', {},
-      el('p', {}, el('strong', {}, `From ${niceDate(d.from)}: `), `${dayText(d.schedule.day_of_week)} ${timeText(d.schedule.start_time, d.schedule.end_time)}${f.location.get() ? ` at ${f.location.get()}` : ''}.`),
+      el('p', {}, el('strong', {}, `From ${niceDate(d.from)}: `), `${dayText(d.schedule.day_of_week)} ${sessionTime(a, d.schedule)}${f.location.get() ? ` at ${f.location.get()}` : ''}.`),
       el('p', {}, d.replaced > 0
         ? `${count(d.replaced, 'upcoming session')} replaced by ${d.sessions} new one${d.sessions === 1 ? '' : 's'}.`
         : `${count(d.sessions, 'session')} added.`),
