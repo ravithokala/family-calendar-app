@@ -2,7 +2,7 @@
 
 import { el, longDate } from '../dom.js';
 import { openSheet, showIssues } from './sheet.js';
-import { field, input, select, checkbox, chips, saveButton, busy } from './fields.js';
+import { field, input, select, checkbox, chips, saveButton, busy, linkDates } from './fields.js';
 import { timeText } from './parts.js';
 import { milestoneSheet } from './milestones.js';
 
@@ -57,6 +57,7 @@ export function eventSheet(ctx, from) {
     masterOnly: checkbox(initial.calendars.length > 0, 'Print on Master only'),
     icon: select(initial.icon ?? '', [['', '(automatic)'], ...ctx.meta.icons.map((i) => /** @type {[string, string]} */ ([i, i]))]),
   };
+  linkDates(f.start_date, f.end_date);
   const times = el('div', { class: 'row' }, field('Start', f.start_time.node), field('End', f.end_time.node));
   const syncTimes = () => { times.hidden = f.all_day.get(); };
   f.all_day.box.addEventListener('change', syncTimes);
@@ -166,6 +167,7 @@ export function routineSheet(ctx, prefill = {}) {
     location: input('text', null),
     source: input('text', null, { placeholder: 'e.g. Club email, 24 Sep' }),
   };
+  linkDates(f.from, f.until);
   const termRow = el('div', {}, f.termTime.node);
   const sync = () => { termRow.hidden = !ctx.meta.children.includes(f.person.get()[0] ?? ''); };
   f.person.onChange(sync);
@@ -219,6 +221,7 @@ export function reminderSheet(ctx, reminder, prefill = {}) {
     from: input('date', reminder?.window_start ?? prefill.from ?? null), until: input('date', reminder?.window_end ?? prefill.until ?? null),
     notes: input('text', reminder?.notes ?? null),
   };
+  linkDates(f.from, f.until, { required: true });
   const form = el('div', { class: 'form' },
     prefill.note ? el('div', { class: 'msg warning' }, prefill.note) : '',
     field('What', f.title.node), field('Who does it', f.owner.node), field('About (optional)', f.related.node),

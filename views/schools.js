@@ -2,7 +2,7 @@
 
 import { el, niceDate, fullDate } from '../dom.js';
 import { openSheet, showIssues } from './sheet.js';
-import { field, input, select, checkbox, saveButton } from './fields.js';
+import { field, input, select, checkbox, saveButton, linkDates } from './fields.js';
 
 /**
  * School dates on the phone (ADR-084): each child's school, its coming breaks, and a form for a
@@ -109,6 +109,7 @@ function schoolSheet(ctx, schools) {
     const type = select('HALF_TERM', ctx.meta.periodTypes.map((t) => /** @type {[string, string]} */ ([t, LABELS[t] ?? t])));
     const from = input('date', null);
     const to = input('date', null);
+    linkDates(from, to);
     const row = el('div', { class: 'period' }, type.node, from.node, to.node,
       el('button', { class: 'link danger-text', type: 'button', onclick: () => row.remove() }, '✕'));
     Object.assign(row, { read: () => ({ period_type: type.get(), start_date: from.get(), end_date: to.get() ?? undefined }) });

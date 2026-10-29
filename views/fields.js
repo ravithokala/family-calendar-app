@@ -29,6 +29,45 @@ export function input(type, value, attrs = {}) {
 }
 
 /**
+ * Links a pair of dates, from and to (RT, 2026-10-29): the to-date's picker opens at the from date,
+ * not today, and nothing earlier than the from date can be picked. A phone's date picker opens at
+ * the box's value, or today when it is empty, so:
+ * - a required to-date (a reminder's By) is filled with the from date when it is empty;
+ * - an optional one (an event's end, a routine's until) is filled only while its picker is open, and
+ *   emptied again if left as the from date, so leaving it blank still means "none".
+ * A to-date earlier than a newly picked from date moves up to it.
+ * @param {{ node: HTMLInputElement }} from
+ * @param {{ node: HTMLInputElement }} to
+ * @param {{ required?: boolean }} [options]
+ */
+export function linkDates(from, to, { required = false } = {}) {
+  const sync = () => {
+    const start = from.node.value;
+    to.node.min = start;
+    if (start && to.node.value && to.node.value < start) to.node.value = start;
+    if (required && start && !to.node.value) to.node.value = start;
+  };
+  from.node.addEventListener('input', sync);
+  from.node.addEventListener('change', sync);
+  sync();
+  if (required) return;
+  let filled = false;
+  const open = () => {
+    if (to.node.value || !from.node.value) return;
+    to.node.value = from.node.value;
+    filled = true;
+  };
+  // Before the picker reads the value: a tap, or the box getting focus another way.
+  to.node.addEventListener('pointerdown', open);
+  to.node.addEventListener('focus', open);
+  to.node.addEventListener('change', () => { if (to.node.value !== from.node.value) filled = false; });
+  to.node.addEventListener('blur', () => {
+    if (filled && to.node.value === from.node.value) to.node.value = '';
+    filled = false;
+  });
+}
+
+/**
  * @param {string|null} value
  * @param {Array<[string, string]>} options  [value, label]
  */
