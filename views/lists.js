@@ -15,7 +15,7 @@ import { field, input, select, chips, saveButton, busy } from './fields.js';
  * @typedef {{ item_id: string, list_id: string, text: string, owner: string[], due_date: string|null, notes: string|null,
  *   status: string, done_at: string|null, done_by: string|null }} Item
  * @typedef {{ event_id: string, title: string, start_date: string, participants: string[] }} LinkableEvent
- * @typedef {{ lists: List[], items: Item[], events: LinkableEvent[] }} ListsData
+ * @typedef {{ lists: List[], items: Item[], events: LinkableEvent[], order?: string[] }} ListsData  order: list ids as dragged (ADR-119)
  * @typedef {{ ctx: import('./forms.js').FormContext, data: ListsData, open: (listId: string|null) => void,
  *   redraw: () => void, persist: () => void, reload: () => void, renamed: (from: string, to: string) => void }} ListsScreen
  */
@@ -498,12 +498,57 @@ function itemRow(screen, item, today) {
   return row;
 }
 
+/** Which list each card shows, for reading the order back after a drag. @type {WeakMap<Element, List>} */
+const cardLists = new WeakMap();
+
+/**
+ * The lists in the order dragged (ADR-119): lists not in it yet (new ones) first, newest first,
+ * then the rest as placed.
+ * @param {List[]} lists
+ * @param {string[]|undefined} order
+ */
+export function arranged(lists, order) {
+  const place = new Map((order ?? []).map((id, n) => [id, n]));
+  const at = (/** @type {List} */ l) => place.get(l.list_id) ?? -1;
+  return [...lists].sort((a, b) => (at(a) - at(b)) || b.created_at.localeCompare(a.created_at));
+}
+
+/**
+ * Saves the lists' order after a drag: shown at once, saved behind; put back if the save fails.
+ * @param {ListsScreen} screen
+ * @param {HTMLElement} box  the dragged cards, top to bottom
+ */
+function saveArrangement(screen, box) {
+  const shown = [...box.children].map((c) => cardLists.get(c)).filter((l) => l !== undefined);
+  // Archived lists keep their places after the active ones, for when they are reopened.
+  const rest = arranged(screen.data.lists, screen.data.order).filter((l) => !shown.includes(l));
+  const sequence = [...shown, ...rest];
+  const before = screen.data.order;
+  screen.data.order = sequence.map((l) => l.list_id).filter((id) => !isUnsaved(id));
+  screen.persist();
+  screen.redraw();
+  enqueue(async () => {
+    try {
+      const r = await screen.ctx.call('lists.arrange', { list_ids: sequence.filter((l) => screen.data.lists.includes(l) && !isUnsaved(l.list_id)).map((l) => l.list_id) });
+      if (!r.ok) throw new Error(r.errors.map((e) => e.message).join('; '));
+      screen.data.order = r.data.order;
+      screen.persist();
+    } catch (e) {
+      screen.data.order = before;
+      screen.persist();
+      screen.redraw();
+      toast(`Could not save the new order: ${message(e)}`);
+    }
+  });
+}
+
 /**
  * The lists overview: active lists with progress, a New list button, archived lists folded away.
+ * Active lists are in the order dragged by their grips (ADR-119).
  * @param {ListsScreen} screen
  */
 export function listsOverview(screen) {
-  const active = screen.data.lists.filter((l) => l.status === 'ACTIVE').sort((a, b) => b.created_at.localeCompare(a.created_at));
+  const active = arranged(screen.data.lists.filter((l) => l.status === 'ACTIVE'), screen.data.order);
   const archived = screen.data.lists.filter((l) => l.status === 'ARCHIVED');
   const events = new Map(screen.data.events.map((e) => [e.event_id, e]));
   /** @param {List} l */
@@ -518,9 +563,21 @@ export function listsOverview(screen) {
       el('div', { class: 'details' }, [items.length ? count : 'empty', plain ? 'notes' : ticksInPlace(l) ? 'tick in place' : '', eventText(event)].filter(Boolean).join(' · ')),
       items.length && !plain ? el('div', { class: 'progress' }, el('span', { style: { width: `${Math.round((done / items.length) * 100)}%` } })) : '');
   };
+  // An active list's card with its grip beside it: drag the grip to move the list (ADR-119).
+  const box = el('div', { class: 'list-cards' });
+  /** @param {List} l */
+  const movable = (l) => {
+    const grip = el('span', { class: 'grip', role: 'button', 'aria-label': `Drag to move ${l.title}`, title: 'Drag to move' }, '⠿');
+    const row = el('div', { class: 'list-card-row' }, card(l), isUnsaved(l.list_id) ? '' : grip);
+    cardLists.set(row, l);
+    if (!isUnsaved(l.list_id)) dragToReorder(row, /** @type {HTMLElement} */ (grip), () => saveArrangement(screen, box));
+    return row;
+  };
+  box.append(...active.map(movable));
   return el('div', {},
     el('button', { class: 'wide-button', type: 'button', onclick: () => listSheet(screen) }, '+ New list'),
-    active.length ? active.map(card) : el('p', { class: 'muted' }, 'No lists yet. Make one for shopping, a party, moving house, anything.'),
+    active.length ? box : el('p', { class: 'muted' }, 'No lists yet. Make one for shopping, a party, moving house, anything.'),
+    active.length > 1 ? el('p', { class: 'muted small swipe-hint' }, 'Drag ⠿ to put the lists in your own order.') : '',
     archived.length ? el('details', { class: 'archived' }, el('summary', { class: 'muted' }, `Archived (${archived.length})`), archived.map(card)) : '');
 }
 

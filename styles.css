@@ -216,6 +216,12 @@ textarea.prompt { font: 12px/1.35 ui-monospace, Menlo, Consolas, monospace; back
 /* Lists (ADR-085) */
 .list-card { display: block; width: 100%; text-align: left; border: 1px solid var(--line); border-radius: 10px; padding: 12px; margin: 8px 0; background: var(--bg); cursor: pointer; }
 .list-card-title { font-weight: 700; font-size: 17px; }
+/* All lists in your own order (ADR-119): the card and its grip side by side. */
+.list-card-row { display: flex; align-items: stretch; gap: 4px; position: relative; }
+.list-card-row .list-card { flex: 1; min-width: 0; }
+.list-card-row .grip { margin: 8px 0; }
+.list-card-row.dragging { z-index: 5; }
+.list-card-row.dragging .list-card { box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18); }
 .progress { height: 4px; background: var(--soft); border-radius: 2px; margin-top: 8px; overflow: hidden; }
 .progress span { display: block; height: 100%; background: var(--accent); }
 .archived summary { margin: 12px 0 4px; cursor: pointer; }
