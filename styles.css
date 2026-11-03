@@ -222,6 +222,11 @@ textarea.prompt { font: 12px/1.35 ui-monospace, Menlo, Consolas, monospace; back
 .list-card-row .grip { margin: 8px 0; }
 .list-card-row.dragging { z-index: 5; }
 .list-card-row.dragging .list-card { box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18); }
+/* Reorder mode (RT, 2026-11-03): a bar with Cancel and Done; compact rows with grips. */
+.reorder-bar { position: sticky; top: 0; z-index: 6; display: flex; align-items: center; gap: 12px; padding: 8px 0; background: var(--bg); border-bottom: 1px solid var(--line); }
+.reorder-title { flex: 1; font-weight: 700; }
+.list-card.compact { padding: 10px 12px; cursor: default; }
+.list-item.reorder-row .list-item-body { cursor: default; }
 .progress { height: 4px; background: var(--soft); border-radius: 2px; margin-top: 8px; overflow: hidden; }
 .progress span { display: block; height: 100%; background: var(--accent); }
 .archived summary { margin: 12px 0 4px; cursor: pointer; }

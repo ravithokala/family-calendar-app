@@ -483,18 +483,51 @@ function itemRow(screen, item, today) {
     plain ? '' : el('button', { class: 'tick', type: 'button', 'aria-pressed': String(done), 'aria-label': done ? 'Untick' : 'Tick', onclick: () => toggle(screen, item) }),
     el('div', { class: 'list-item-body', onclick: () => itemSheet(screen, item) },
       el('div', { class: 'list-item-text' }, item.text),
-      meta ? el('div', { class: `details${overdue ? ' overdue' : ''}` }, meta) : ''),
-    // Done items are not dragged; an unsaved one waits for its id (ADR-115).
-    done && !plain && !inPlace || isUnsaved(item.item_id) ? '' : el('span', { class: 'grip', role: 'button', 'aria-label': 'Drag to move', title: 'Drag to move' }, '⠿'));
+      meta ? el('div', { class: `details${overdue ? ' overdue' : ''}` }, meta) : ''));
   const row = el('li', { class: `list-item${done && !plain ? (inPlace ? ' ticked' : ' done') : ''}${plain ? ' plain-line' : ''}${isUnsaved(item.item_id) ? ' saving' : ''}` },
     el('button', { class: 'list-item-delete', type: 'button' }, 'Delete'), slide);
   swipeToDelete(row, slide, () => {
     removeItem(screen, item).then((r) => { if (!r.ok) toast(`Could not delete "${item.text}": ${r.errors.map((e) => e.message).join('; ')}`); });
   });
+  return row;
+}
+
+/**
+ * Reorder mode (RT, 2026-11-03): the grips show only after tapping "Reorder", with Done and Cancel;
+ * moves are saved once, on Done. Null when not reordering.
+ * @type {null | { kind: 'lists' } | { kind: 'items', listId: string }}
+ */
+let reordering = null;
+
+/**
+ * The bar above what is being reordered: what to do, Cancel and Done.
+ * @param {string} title
+ * @param {() => void} onDone
+ * @param {() => void} onCancel
+ */
+function reorderBar(title, onDone, onCancel) {
+  return el('div', { class: 'reorder-bar' },
+    el('span', { class: 'reorder-title' }, title),
+    el('button', { class: 'link', type: 'button', onclick: onCancel }, 'Cancel'),
+    el('button', { class: 'primary', type: 'button', onclick: onDone }, 'Done'));
+}
+
+/** Whether the rows in a box are in a different order from these ids. @param {HTMLElement} box @param {WeakMap<Element, { item_id?: string, list_id: string }>} map @param {string[]} ids */
+const reordered = (box, map, ids) => {
+  const now = [...box.children].map((c) => { const x = map.get(c); return x ? ('item_id' in x ? x.item_id : x.list_id) : null; }).filter(Boolean);
+  return now.join('|') !== ids.join('|');
+};
+
+/**
+ * An item in reorder mode: its text and its grip, nothing to tap or swipe (ADR-115).
+ * @param {Item} item
+ */
+function reorderRow(item) {
+  const grip = el('span', { class: 'grip', role: 'button', 'aria-label': `Drag to move ${item.text}`, title: 'Drag to move' }, '⠿');
+  const row = el('li', { class: `list-item reorder-row${item.status === 'DONE' ? ' ticked' : ''}` },
+    el('div', { class: 'list-item-slide' }, el('div', { class: 'list-item-body' }, el('div', { class: 'list-item-text' }, item.text)), grip));
   rowItems.set(row, item);
-  const grip = /** @type {HTMLElement|null} */ (slide.querySelector('.grip'));
-  const list = screen.data.lists.find((l) => l.list_id === item.list_id);
-  if (grip && list) dragToReorder(row, grip, () => saveOrder(screen, list, /** @type {HTMLElement} */ (row.parentElement)));
+  dragToReorder(row, /** @type {HTMLElement} */ (grip), () => {});
   return row;
 }
 
@@ -548,6 +581,7 @@ function saveArrangement(screen, box) {
  * @param {ListsScreen} screen
  */
 export function listsOverview(screen) {
+  if (reordering?.kind === 'items') reordering = null;
   const active = arranged(screen.data.lists.filter((l) => l.status === 'ACTIVE'), screen.data.order);
   const archived = screen.data.lists.filter((l) => l.status === 'ARCHIVED');
   const events = new Map(screen.data.events.map((e) => [e.event_id, e]));
@@ -563,21 +597,32 @@ export function listsOverview(screen) {
       el('div', { class: 'details' }, [items.length ? count : 'empty', plain ? 'notes' : ticksInPlace(l) ? 'tick in place' : '', eventText(event)].filter(Boolean).join(' · ')),
       items.length && !plain ? el('div', { class: 'progress' }, el('span', { style: { width: `${Math.round((done / items.length) * 100)}%` } })) : '');
   };
-  // An active list's card with its grip beside it: drag the grip to move the list (ADR-119).
-  const box = el('div', { class: 'list-cards' });
-  /** @param {List} l */
-  const movable = (l) => {
-    const grip = el('span', { class: 'grip', role: 'button', 'aria-label': `Drag to move ${l.title}`, title: 'Drag to move' }, '⠿');
-    const row = el('div', { class: 'list-card-row' }, card(l), isUnsaved(l.list_id) ? '' : grip);
-    cardLists.set(row, l);
-    if (!isUnsaved(l.list_id)) dragToReorder(row, /** @type {HTMLElement} */ (grip), () => saveArrangement(screen, box));
-    return row;
-  };
-  box.append(...active.map(movable));
+  // Reorder mode (RT, 2026-11-03): titles only, a grip on each, saved once on Done (ADR-119).
+  const movable = active.filter((l) => !isUnsaved(l.list_id));
+  if (reordering?.kind === 'lists' && movable.length > 1) {
+    const box = el('div', { class: 'list-cards' });
+    for (const l of movable) {
+      const grip = el('span', { class: 'grip', role: 'button', 'aria-label': `Drag to move ${l.title}`, title: 'Drag to move' }, '⠿');
+      const row = el('div', { class: 'list-card-row' }, el('div', { class: 'list-card compact' }, el('div', { class: 'list-card-title' }, l.title)), grip);
+      cardLists.set(row, l);
+      dragToReorder(row, /** @type {HTMLElement} */ (grip), () => {});
+      box.append(row);
+    }
+    const ids = movable.map((l) => l.list_id);
+    return el('div', { class: 'reordering' },
+      reorderBar('Reorder lists', () => {
+        reordering = null;
+        if (reordered(box, /** @type {any} */ (cardLists), ids)) saveArrangement(screen, box); else screen.redraw();
+      }, () => { reordering = null; screen.redraw(); }),
+      el('p', { class: 'muted small' }, 'Drag ⠿ to move a list, then tap Done.'),
+      box);
+  }
+  reordering = null;
   return el('div', {},
     el('button', { class: 'wide-button', type: 'button', onclick: () => listSheet(screen) }, '+ New list'),
-    active.length ? box : el('p', { class: 'muted' }, 'No lists yet. Make one for shopping, a party, moving house, anything.'),
-    active.length > 1 ? el('p', { class: 'muted small swipe-hint' }, 'Drag ⠿ to put the lists in your own order.') : '',
+    active.length ? el('div', { class: 'list-cards' }, active.map(card)) : el('p', { class: 'muted' }, 'No lists yet. Make one for shopping, a party, moving house, anything.'),
+    movable.length > 1 ? el('div', { class: 'row-actions list-actions' },
+      el('button', { class: 'link reorder-lists', type: 'button', onclick: () => { reordering = { kind: 'lists' }; screen.redraw(); window.scrollTo(0, 0); } }, 'Reorder lists')) : '',
     archived.length ? el('details', { class: 'archived' }, el('summary', { class: 'muted' }, `Archived (${archived.length})`), archived.map(card)) : '');
 }
 
@@ -599,6 +644,23 @@ export function listDetail(screen, listId, today) {
   const done = plain || inPlace ? [] : items.filter((i) => i.status === 'DONE');
   const event = list.event_id ? screen.data.events.find((e) => e.event_id === list.event_id) : undefined;
   const ticked = plain ? 0 : items.filter((i) => i.status === 'DONE').length;
+  // Done items are not moved; an unsaved one waits for its id (ADR-115).
+  const movable = open.filter((i) => !isUnsaved(i.item_id));
+
+  // Reorder mode (RT, 2026-11-03): only the items and their grips, saved once on Done.
+  if (reordering?.kind === 'items' && reordering.listId === listId && movable.length > 1) {
+    const ul = el('ul', { class: 'list-items' }, movable.map(reorderRow));
+    const ids = movable.map((i) => i.item_id);
+    return el('div', { class: 'list-detail reordering' },
+      el('h2', { class: 'list-title' }, list.title),
+      reorderBar(plain ? 'Reorder lines' : 'Reorder items', () => {
+        reordering = null;
+        if (reordered(ul, /** @type {any} */ (rowItems), ids)) saveOrder(screen, list, ul); else screen.redraw();
+      }, () => { reordering = null; screen.redraw(); }),
+      el('p', { class: 'muted small' }, plain ? 'Drag ⠿ to move a line, then tap Done.' : 'Drag ⠿ to move an item, then tap Done.'),
+      ul);
+  }
+  reordering = null;
 
   const newText = /** @type {HTMLInputElement} */ (el('input', { type: 'text', placeholder: plain ? 'Add a line' : 'Add an item', enterkeyhint: 'done', class: 'add-input' }));
   const add = () => {
@@ -632,11 +694,13 @@ export function listDetail(screen, listId, today) {
     open.length ? el('ul', { class: 'list-items' }, open.map((i) => itemRow(screen, i, today))) : el('p', { class: 'muted' }, items.length ? 'All done.' : `Nothing on this list yet.`),
     el('div', { class: 'add-row' }, newText, el('button', { class: 'primary', type: 'button', onclick: add }, 'Add')),
     el('button', { class: 'link add-several', type: 'button', onclick: () => severalSheet(screen, list) }, plain ? '+ Add several lines at once' : '+ Add several at once'),
-    open.length ? el('p', { class: 'muted small swipe-hint' }, 'Drag ⠿ to move an item; swipe it left to delete it.') : '',
+    open.length ? el('p', { class: 'muted small swipe-hint' }, 'Swipe an item left to delete it.') : '',
     done.length ? el('details', { class: 'done-items' }, el('summary', { class: 'muted' }, `Done (${done.length})`),
       el('ul', { class: 'list-items' }, done.map((i) => itemRow(screen, i, today)))) : '',
     el('div', { class: 'row-actions list-actions' },
       el('button', { class: 'link', type: 'button', onclick: () => listSheet(screen, list) }, 'Rename, change kind or attach to an event'),
+      movable.length > 1 ? el('button', { class: 'link reorder-items', type: 'button', onclick: () => { reordering = { kind: 'items', listId }; screen.redraw(); window.scrollTo(0, 0); } },
+        plain ? 'Reorder lines' : 'Reorder items') : '',
       // ADR-116: e.g. a packing list, ready for the next trip.
       ticked ? el('button', { class: 'link', type: 'button', onclick: (/** @type {Event} */ ev) => untickAll(screen, list, ticked, /** @type {HTMLButtonElement} */ (ev.currentTarget)) }, 'Untick all') : '',
       el('button', { class: 'link', type: 'button', onclick: async (/** @type {Event} */ ev) => {
