@@ -2,14 +2,14 @@
 
 import { el, niceDate, fullDate } from '../dom.js';
 import { openSheet, showIssues } from './sheet.js';
-import { field, input, select, chips, saveButton, busy } from './fields.js';
+import { field, input, select, chips, checkbox, saveButton, busy } from './fields.js';
 
 /**
  * Routines in More: what each one is now, and changing it from a date, ending it, or its icon
  * (ADR-068, ADR-086). A change or an end is previewed before anything is saved.
  *
  * @typedef {{ activity_id: string, name: string, person: string, default_start_time: string|null, default_end_time: string|null,
- *   location: string|null, term_time_only: boolean, active: boolean, icon: string|null }} Activity
+ *   location: string|null, term_time_only: boolean, active: boolean, icon: string|null, child_only?: boolean }} Activity  child_only: ADR-120
  * @typedef {{ schedule_id: string, activity_id: string, schedule_type: string, valid_from: string|null, valid_to: string|null,
  *   day_of_week: string[], start_time: string|null, end_time: string|null, status: string }} Schedule
  * @typedef {{ date: string, reason: 'cancelled'|'edited' }} Dropped
@@ -249,6 +249,17 @@ export function routineDetail(ctx, a, schedules, today, lastChange) {
   const ended = running.length === 0;
   const icon = select(a.icon ?? '', [['', '(from its kind)'], ...ctx.meta.icons.map((/** @type {string} */ i) => /** @type {[string, string]} */ ([i, i]))]);
   const open = (/** @type {() => void} */ next) => () => { sheet.close(); next(); };
+  // ADR-120: a child's routine shown only on their own calendar; saved as soon as it is ticked.
+  const childOnly = ctx.meta.children.includes(a.person) ? checkbox(a.child_only === true, `Only on ${a.person}'s calendar, not Master or Family (e.g. a club in school hours)`) : null;
+  childOnly?.box.addEventListener('change', async () => {
+    const value = childOnly.get();
+    childOnly.box.disabled = true;
+    const r = await ctx.call('routines.setChildOnly', { activity_id: a.activity_id, child_only: value });
+    childOnly.box.disabled = false;
+    if (!r.ok) { childOnly.box.checked = !value; showIssues(sheet.messages, r); return; }
+    sheet.close();
+    ctx.saved(value ? `${a.person} ${a.name} is now on ${a.person}'s calendar only.` : `${a.person} ${a.name} is on Master and Family again.`, r);
+  });
   const body = el('div', { class: 'form' },
     el('p', {}, ended ? 'Ended.' : running.map((s) => scheduleText(a, s, today)).join(' · ')),
     a.location ? el('p', { class: 'muted' }, a.location) : '',
@@ -258,6 +269,7 @@ export function routineDetail(ctx, a, schedules, today, lastChange) {
       ended ? '' : el('button', { class: 'wide-button danger-text', type: 'button', onclick: open(() => endSheet(ctx, a, today)) }, 'End this routine…'),
       lastChange ? el('button', { class: 'wide-button', type: 'button', onclick: open(() => undoSheet(ctx, a, lastChange)) }, `↶ Undo "${lastChange}"`) : ''),
     published ? el('p', { class: 'muted small' }, 'This routine follows published dates: new dates come from a source.') : '',
+    childOnly ? childOnly.node : '',
     field('Icon', icon.node),
     el('div', { class: 'actions' }, saveButton('Save icon', async () => {
       const r = await ctx.call('routines.setIcon', { activity_id: a.activity_id, icon: icon.get() });

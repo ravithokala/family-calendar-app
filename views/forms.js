@@ -54,10 +54,24 @@ export function eventSheet(ctx, from) {
     related_people: chips(ctx.meta.participants, initial.related_people),
     location: input('text', initial.location),
     notes: input('text', initial.notes),
-    masterOnly: checkbox(initial.calendars.length > 0, 'Print on Master only'),
+    masterOnly: checkbox(initial.calendars.includes('MASTER'), 'Print on Master only'),
+    // ADR-120: e.g. a club during school hours, which only the child needs.
+    childOnly: checkbox(initial.calendars.length > 0 && !initial.calendars.includes('MASTER'), 'Only on the child\'s calendar'),
     icon: select(initial.icon ?? '', [['', '(automatic)'], ...ctx.meta.icons.map((i) => /** @type {[string, string]} */ ([i, i]))]),
   };
   linkDates(f.start_date, f.end_date);
+  // "Only on C's calendar" (ADR-120): offered when children take part; never together with Master only.
+  const childOnlyFor = () => f.participants.get().filter((p) => ctx.meta.children.includes(p));
+  const childOnlyText = /** @type {HTMLElement} */ (f.childOnly.node.querySelector('span'));
+  const syncChildOnly = () => {
+    const kids = childOnlyFor();
+    f.childOnly.node.hidden = kids.length === 0;
+    childOnlyText.textContent = `Only on ${kids.join(' and ')}'s calendar${kids.length > 1 ? 's' : ''} (not Master or Family)`;
+  };
+  f.participants.onChange(syncChildOnly);
+  syncChildOnly();
+  f.masterOnly.box.addEventListener('change', () => { if (f.masterOnly.get()) f.childOnly.box.checked = false; });
+  f.childOnly.box.addEventListener('change', () => { if (f.childOnly.get()) f.masterOnly.box.checked = false; });
   const times = el('div', { class: 'row' }, field('Start', f.start_time.node), field('End', f.end_time.node));
   const syncTimes = () => { times.hidden = f.all_day.get(); };
   f.all_day.box.addEventListener('change', syncTimes);
@@ -69,7 +83,7 @@ export function eventSheet(ctx, from) {
       title: f.title.get(), event_type: f.event_type.get(), start_date: f.start_date.get(), end_date: f.end_date.get(),
       all_day: allDay, start_time: allDay ? null : f.start_time.get(), end_time: allDay ? null : f.end_time.get(),
       participants: f.participants.get(), related_people: f.related_people.get(), location: f.location.get(), notes: f.notes.get(),
-      calendars: f.masterOnly.get() ? ['MASTER'] : [], icon: f.icon.get(),
+      calendars: f.masterOnly.get() ? ['MASTER'] : childOnlyFor().length && f.childOnly.get() ? childOnlyFor() : [], icon: f.icon.get(),
     };
   };
 
@@ -82,7 +96,7 @@ export function eventSheet(ctx, from) {
     field('About (optional)', f.related_people.node),
     el('details', { class: 'more-fields' }, el('summary', {}, 'More: until, where, notes, printing'),
       field('Until (multi-day)', f.end_date.node), field('Where', f.location.node), field('Notes', f.notes.node),
-      f.masterOnly.node, field('Icon', f.icon.node)),
+      f.masterOnly.node, f.childOnly.node, field('Icon', f.icon.node)),
     el('div', { class: 'actions' }, saveButton(review ? 'Approve' : item ? 'Save changes' : 'Add event', async () => {
       const v = values();
       /** @type {ApiResponse} */
@@ -164,12 +178,18 @@ export function routineSheet(ctx, prefill = {}) {
     start: input('time', prefill.start ?? null), end: input('time', prefill.end ?? null),
     from: input('date', new Date().toISOString().slice(0, 10)), until: input('date', null),
     termTime: checkbox(false, 'Term time only (not in school holidays)'),
+    // ADR-120: e.g. a club in school hours, which only the child needs to know.
+    childOnly: checkbox(false, 'Only on the child\'s calendar (e.g. a club in school hours)'),
     location: input('text', null),
     source: input('text', null, { placeholder: 'e.g. Club email, 24 Sep' }),
   };
   linkDates(f.from, f.until);
-  const termRow = el('div', {}, f.termTime.node);
-  const sync = () => { termRow.hidden = !ctx.meta.children.includes(f.person.get()[0] ?? ''); };
+  const termRow = el('div', {}, f.termTime.node, f.childOnly.node);
+  const sync = () => {
+    const person = f.person.get()[0] ?? '';
+    termRow.hidden = !ctx.meta.children.includes(person);
+    /** @type {HTMLElement} */ (f.childOnly.node.querySelector('span')).textContent = `Only on ${person || 'the child'}'s calendar, not Master or Family (e.g. a club in school hours)`;
+  };
   f.person.onChange(sync);
   sync();
   const form = el('div', { class: 'form' },
@@ -190,6 +210,7 @@ export function routineSheet(ctx, prefill = {}) {
           activity_id: person && name ? `${person}_${name.toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_|_$/g, '')}` : null,
           name, person, category: f.category.get(), term_time_only: termTime, term_calendar: termTime && school ? school.school_id : null,
           default_start_time: f.start.get(), default_end_time: f.end.get(), location: f.location.get(),
+          child_only: person !== null && ctx.meta.children.includes(person) && f.childOnly.get(),
         },
         schedule: { name: 'Weekly', valid_from: f.from.get(), valid_to: f.until.get(), day_of_week: dayNames },
         // Optional (RT, 2026-09-27: left blank, the save failed with "source.title is required").
