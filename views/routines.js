@@ -2,7 +2,7 @@
 
 import { el, niceDate, fullDate } from '../dom.js';
 import { openSheet, showIssues } from './sheet.js';
-import { field, input, select, chips, checkbox, saveButton, busy } from './fields.js';
+import { field, input, select, chips, checkbox, saveButton, busy, linkDates } from './fields.js';
 
 /**
  * Routines in More: what each one is now, and changing it from a date, ending it, or its icon
@@ -152,19 +152,22 @@ const undoRoutine = (ctx, a) => () => ctx.call('routines.undo', { activity_id: a
 function changeSheet(ctx, a, current, today) {
   const f = {
     from: input('date', today),
+    // RT, 2026-11-04: an end date, term-time routines too; the current one if it has one.
+    until: input('date', current?.valid_to ?? null),
     days: chips(ctx.meta.weekdays.map((/** @type {string} */ d) => d.slice(0, 3)), (current?.day_of_week ?? []).map((d) => d.slice(0, 3))),
     start: input('time', current?.start_time ?? a.default_start_time),
     end: input('time', current?.start_time ? current.end_time : a.default_end_time),
     location: input('text', a.location),
   };
+  linkDates(f.from, f.until);
   const form = el('div', {},
-    field('From', f.from.node),
+    el('div', { class: 'row' }, field('From', f.from.node), field('Until (optional)', f.until.node)),
     field('Days', f.days.node),
     el('div', { class: 'row' }, field('Start (optional)', f.start.node), field('End (optional)', f.end.node)),
     field('Where', f.location.node),
     el('p', { class: 'muted small' }, 'Sessions before this date stay as they were. Leave the times empty for a routine with no set time.'));
   const payload = () => ({
-    activity_id: a.activity_id, from: f.from.get(), start_time: f.start.get(), end_time: f.end.get(), location: f.location.get(),
+    activity_id: a.activity_id, from: f.from.get(), until: f.until.get(), start_time: f.start.get(), end_time: f.end.get(), location: f.location.get(),
     day_of_week: f.days.get().map((d) => ctx.meta.weekdays.find((/** @type {string} */ w) => w.startsWith(d)) ?? d),
   });
   previewSheet(ctx, {
@@ -172,7 +175,8 @@ function changeSheet(ctx, a, current, today) {
     form,
     preview: () => ctx.call('routines.change', { ...payload(), dry_run: true }),
     describe: (d) => el('div', {},
-      el('p', {}, el('strong', {}, `From ${niceDate(d.from)}: `), `${dayText(d.schedule.day_of_week)} ${sessionTime(a, d.schedule)}${f.location.get() ? ` at ${f.location.get()}` : ''}.`),
+      el('p', {}, el('strong', {}, `From ${niceDate(d.from)}${d.schedule.valid_to ? ` until ${niceDate(d.schedule.valid_to)}` : ''}: `),
+        `${dayText(d.schedule.day_of_week)} ${sessionTime(a, d.schedule)}${f.location.get() ? ` at ${f.location.get()}` : ''}${a.term_time_only ? ', term time only' : ''}.`),
       el('p', {}, d.replaced > 0
         ? `${count(d.replaced, 'upcoming session')} replaced by ${d.sessions} new one${d.sessions === 1 ? '' : 's'}.`
         : `${count(d.sessions, 'session')} added.`),
