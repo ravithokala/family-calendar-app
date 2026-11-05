@@ -296,7 +296,16 @@ function saveOrder(screen, list, ul) {
   const moved = [...ul.children].map((r) => rowItems.get(r)).filter((i) => i !== undefined);
   const items = ordered(screen.data.items.filter((i) => i.list_id === list.list_id), list.item_order);
   // A checklist's done items keep their places after the open ones.
-  const sequence = [...moved, ...items.filter((i) => !moved.includes(i))];
+  saveSequence(screen, list, [...moved, ...items.filter((i) => !moved.includes(i))]);
+}
+
+/**
+ * Shows a list's items in this order at once and saves it behind; put back if the save fails.
+ * @param {ListsScreen} screen
+ * @param {List} list
+ * @param {Item[]} sequence  every item of the list, top to bottom
+ */
+function saveSequence(screen, list, sequence) {
   const before = list.item_order;
   // Unsaved items have no id yet: they follow, in the order added, as new items do.
   list.item_order = sequence.map((i) => i.item_id).filter((id) => !isUnsaved(id));
@@ -436,6 +445,20 @@ function toggle(screen, item) {
       toast(`Could not save the tick: ${message(e)}`);
     }
   });
+}
+
+/**
+ * Moves every unticked item to the top in one tap, ticked ones below, each keeping its order
+ * (RT, 2026-11-05: a tick-in-place shopping list, tidied when wanted, never while ticking). Undo puts
+ * the order back.
+ * @param {ListsScreen} screen
+ * @param {List} list
+ */
+function untickedToTop(screen, list) {
+  const items = ordered(screen.data.items.filter((i) => i.list_id === list.list_id), list.item_order);
+  saveSequence(screen, list, [...items.filter((i) => i.status !== 'DONE'), ...items.filter((i) => i.status === 'DONE')]);
+  // Undo: the order as it was; items removed since are left out, items added since follow.
+  toast('Unticked items moved to the top.', [], () => saveSequence(screen, list, items.filter((i) => screen.data.items.includes(i))));
 }
 
 /**
@@ -702,6 +725,9 @@ export function listDetail(screen, listId, today) {
       movable.length > 1 ? el('button', { class: 'link reorder-items', type: 'button', onclick: () => { reordering = { kind: 'items', listId }; screen.redraw(); window.scrollTo(0, 0); } },
         plain ? 'Reorder lines' : 'Reorder items') : '',
       // ADR-116: e.g. a packing list, ready for the next trip.
+      // Only when a ticked item sits above an unticked one: otherwise they are at the top already.
+      inPlace && items.some((x, n) => x.status === 'DONE' && items.slice(n + 1).some((y) => y.status !== 'DONE'))
+        ? el('button', { class: 'link unticked-to-top', type: 'button', onclick: () => untickedToTop(screen, list) }, 'Unticked to top') : '',
       ticked ? el('button', { class: 'link', type: 'button', onclick: (/** @type {Event} */ ev) => untickAll(screen, list, ticked, /** @type {HTMLButtonElement} */ (ev.currentTarget)) }, 'Untick all') : '',
       el('button', { class: 'link', type: 'button', onclick: async (/** @type {Event} */ ev) => {
         const status = list.status === 'ACTIVE' ? 'ARCHIVED' : 'ACTIVE';
