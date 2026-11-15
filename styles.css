@@ -301,3 +301,7 @@ textarea.prompt { font: 12px/1.35 ui-monospace, Menlo, Consolas, monospace; back
 #filters .routines-chip[aria-pressed="true"] { background: var(--soft); color: var(--accent); border-color: var(--accent); font-weight: 600; }
 #filters .routines-chip[aria-pressed="false"] { color: var(--muted); text-decoration: line-through; }
 .chip.struck, .pill.struck { text-decoration: line-through; opacity: 0.6; }
+
+/* In progress reminders (ADR-121): waiting on someone else, quieter than the ones to do. */
+.in-progress-head { margin: 12px 0 4px; }
+.items.in-progress .body { color: var(--muted); }

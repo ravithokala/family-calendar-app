@@ -154,7 +154,8 @@ export function daySection(theme, title, day, options = {}) {
  * @param {string} date
  */
 export function remindersOn(reminders, date) {
-  const due = reminders.filter((r) => r.window_start <= date && r.window_end >= date);
+  // In progress ones (ADR-121) are not things to do today: they are under Month's In progress.
+  const due = reminders.filter((r) => r.status !== 'IN_PROGRESS' && r.window_start <= date && r.window_end >= date);
   return due.length === 0 ? '' : el('section', { class: 'reminders' },
     el('h2', {}, 'Reminders'),
     el('ul', { class: 'items' }, due.map((r) => el('li', { class: 'item' },
