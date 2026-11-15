@@ -40,7 +40,7 @@ async function newerVersionPublished() {
 const SWIPE_PX = 60;
 
 /**
- * Swipe left or right on Month, Week and Day for the next or previous one, as › and ‹ (ADR-090).
+ * Swipe left or right on Month and Day for the next or previous one, as › and ‹ (ADR-090).
  * On Today (today and tomorrow), a swipe opens the Day after tomorrow, or yesterday.
  * Vertical scrolling is left alone: a swipe must be mostly sideways and quick.
  */
@@ -57,7 +57,7 @@ function enableSwipe() {
     const from = start;
     start = null;
     const s = readState();
-    if (!from || !['month', 'week', 'day', 'today', 'milestones'].includes(s.screen)) return;
+    if (!from || !['month', 'day', 'today', 'milestones'].includes(s.screen)) return;
     const end = e.changedTouches[0];
     const dx = end.clientX - from.x;
     const dy = end.clientY - from.y;
@@ -112,7 +112,7 @@ export function showSignedIn() {
   $('refresh').hidden = false;
   $('refresh').onclick = () => { app.checkForUpdate(true); app.show(true, true); };
   $('filters').replaceChildren(...app.views.map((v) => el('button', { 'data-view': v, onclick: () => go({ view: v }) }, v === 'FAMILY' ? 'Family' : v)),
-    // Routines on or off for Month and Week (ADR-096): pressed means shown.
+    // Routines on or off for Month (ADR-096): pressed means shown.
     el('button', { 'data-routines': '', class: 'routines-chip', 'aria-label': 'Show routines', onclick: () => { setRoutinesHidden(!routinesHidden()); app.show(); } }, '⟳ Routines'));
   $('pending').onclick = () => go({ screen: 'review' });
   $('tabs').replaceChildren(...TABS.map((screen) => el('button', {

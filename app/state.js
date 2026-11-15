@@ -1,6 +1,6 @@
 // @ts-check
 
-import { el, isoDate, addDays, addMonths, mondayOf, niceDate, longDate, monthTitle } from '../dom.js';
+import { el, isoDate, addDays, addMonths, longDate, monthTitle } from '../dom.js';
 import { monthRange } from '../views/month.js';
 import { updatedText } from '../freshness.js';
 import { lastTiming } from '../api.js';
@@ -10,18 +10,18 @@ import { lastTiming } from '../api.js';
  * address, so Back works), the header's small helpers, and the guard against an older request
  * finishing after a newer one.
  *
- * @typedef {'today' | 'month' | 'week' | 'day' | 'lists' | 'more' | 'review' | 'milestones'} Screen
+ * @typedef {'today' | 'month' | 'day' | 'lists' | 'more' | 'review' | 'milestones'} Screen
  * @typedef {{ screen: Screen, date: string, view: string, list: string|null }} State
  */
 
 export const $ = (/** @type {string} */ id) => /** @type {HTMLElement} */ (document.getElementById(id));
 
-export const SCREENS = /** @type {Screen[]} */ (['today', 'month', 'week', 'day', 'lists', 'more', 'review', 'milestones']);
+export const SCREENS = /** @type {Screen[]} */ (['today', 'month', 'day', 'lists', 'more', 'review', 'milestones']);
 /**
- * The bottom bar (RT, 2026-09-24: Lists replaces Day). Day is reached by tapping a day in Month or
- * Week; Review from the badge and More.
+ * The bottom bar (RT, 2026-09-24: Lists replaces Day; 2026-11-15: no Week, not used, four tabs). Day
+ * is reached by tapping a day in Month; Review from the badge and More.
  */
-export const TABS = /** @type {Screen[]} */ (['today', 'month', 'week', 'lists', 'more']);
+export const TABS = /** @type {Screen[]} */ (['today', 'month', 'lists', 'more']);
 const VIEW_KEY = 'fc.view';
 
 /**
@@ -37,7 +37,9 @@ export const today = () => isoDate(new Date());
 
 /** @returns {State} */
 export function readState() {
-  const [screen, date, view, list] = location.hash.replace(/^#\/?/, '').split('/');
+  const [asked, date, view, list] = location.hash.replace(/^#\/?/, '').split('/');
+  // Week is gone (RT, 2026-11-15): an old link or saved address opens Today.
+  const screen = asked === 'week' ? 'today' : asked;
   let saved = 'FAMILY';
   try { saved = localStorage.getItem(VIEW_KEY) ?? 'FAMILY'; } catch (e) { /* ignore */ }
   return {
@@ -72,10 +74,6 @@ export function frame(s) {
   if (s.screen === 'month') {
     const start = `${s.date.slice(0, 7)}-01`;
     return { ...monthRange(start), title: monthTitle(start), prev: addMonths(start, -1), next: addMonths(start, 1) };
-  }
-  if (s.screen === 'week') {
-    const from = mondayOf(s.date);
-    return { from, to: addDays(from, 6), title: `Week of ${niceDate(from)}`, prev: addDays(from, -7), next: addDays(from, 7) };
   }
   if (s.screen === 'day') return { from: s.date, to: s.date, title: longDate(s.date), prev: addDays(s.date, -1), next: addDays(s.date, 1) };
   const t = today();

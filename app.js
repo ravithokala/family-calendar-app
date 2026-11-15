@@ -38,7 +38,7 @@ async function show(force = false, fresh = false) {
   document.querySelectorAll('#filters button[data-view]').forEach((b) => b.setAttribute('aria-pressed', String(b.getAttribute('data-view') === s.view)));
   const routines = /** @type {HTMLElement|null} */ (document.querySelector('#filters [data-routines]'));
   if (routines) {
-    routines.hidden = s.screen !== 'month' && s.screen !== 'week';
+    routines.hidden = s.screen !== 'month';
     routines.setAttribute('aria-pressed', String(!routinesHidden()));
   }
   $('title').textContent = f.title;

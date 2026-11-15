@@ -15,7 +15,7 @@ import { acceptBackgroundLists } from './lists.js';
 import { $, app, go, today, FRESH_MS, isCurrent, clock, showUpdated, showUpdating, showFetched, drawSaved, showError, showPending, routinesHidden } from './state.js';
 
 /**
- * The calendar screens: Today, Month (default), Week and Day, each for one filter (ADR-080). The
+ * The calendar screens: Today, Month (default) and Day, each for one filter (ADR-080). The
  * phone's saved copy draws at once and the server's answer replaces it; the months either side,
  * Lists and More then load in the background (ADR-088).
  */
@@ -32,7 +32,7 @@ function draw(s, all) {
   if (!all.views) throw new AppOutOfDate();
   const chosen = all.views[s.view] ?? all.views.FAMILY;
   // Routines hidden on Month and Week: what is different stays, changed and cancelled sessions too (ADR-096).
-  const days = routinesHidden() && (s.screen === 'month' || s.screen === 'week') ? chosen.days.map(withoutRoutines) : chosen.days;
+  const days = routinesHidden() && s.screen === 'month' ? chosen.days.map(withoutRoutines) : chosen.days;
   /** @type {import('../views/parts.js').DaysData} */
   const data = { from: all.from, to: all.to, days, reminders: chosen.reminders, pending: all.pending, todos: chosen.todos ?? [] };
   const t = /** @type {import('../views/parts.js').Theme} */ (app.theme);
@@ -65,10 +65,6 @@ function draw(s, all) {
     const monthStart = `${s.date.slice(0, 7)}-01`;
     // The month's reminders under the grid, as on the printed page (ADR-089).
     return el('div', {}, due, monthView(t, data, monthStart, today(), openDay, s.view), monthReminders(ctx, data.reminders, monthStart, today()));
-  }
-  if (s.screen === 'week') {
-    return el('div', {}, data.days.map((d) => [el('div', { 'data-date': d.date }, daySection(t, niceDate(d.date), d, { onTitle: () => openDay(d.date), onItem: onItem(d.date) })),
-      todoSection(data.todos.filter((x) => x.due_date === d.date), todoActions)]));
   }
   if (s.screen === 'day') {
     return el('div', {},
