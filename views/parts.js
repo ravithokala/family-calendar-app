@@ -155,13 +155,18 @@ export function daySection(theme, title, day, options = {}) {
  * @param {(r: AppReminder) => void} [onTap]
  */
 export function remindersOn(reminders, date, onTap) {
-  // In progress ones (ADR-121) are not things to do today: they are under Month's In progress.
   const due = reminders.filter((r) => r.status !== 'IN_PROGRESS' && r.window_start <= date && r.window_end >= date);
-  return due.length === 0 ? '' : el('section', { class: 'reminders' },
+  // In progress ones (ADR-121), whatever their dates, in their own quieter group (RT, 2026-11-15: "in the day view as well").
+  const waiting = reminders.filter((r) => r.status === 'IN_PROGRESS');
+  /** @param {AppReminder} r */
+  const row = (r) => el('li', { class: `item${onTap ? ' tappable' : ''}`, ...(onTap ? { onclick: () => onTap(r) } : {}) },
+    el('span', { class: 'time' }, `by ${r.window_end.slice(8)}/${r.window_end.slice(5, 7)}`),
+    el('div', { class: 'body' }, `${r.owner.join('+')} - ${r.title}`, r.status === 'IN_PROGRESS' && r.notes ? el('div', { class: 'details' }, r.notes) : ''));
+  return due.length + waiting.length === 0 ? '' : el('section', { class: 'reminders' },
     el('h2', {}, 'Reminders'),
-    el('ul', { class: 'items' }, due.map((r) => el('li', { class: `item${onTap ? ' tappable' : ''}`, ...(onTap ? { onclick: () => onTap(r) } : {}) },
-      el('span', { class: 'time' }, `by ${r.window_end.slice(8)}/${r.window_end.slice(5, 7)}`),
-      el('div', { class: 'body' }, `${r.owner.join('+')} - ${r.title}`)))));
+    due.length ? el('ul', { class: 'items' }, due.map(row)) : '',
+    waiting.length ? el('h3', { class: 'muted small in-progress-head' }, 'In progress') : '',
+    waiting.length ? el('ul', { class: 'items in-progress' }, waiting.map(row)) : '');
 }
 
 /**
