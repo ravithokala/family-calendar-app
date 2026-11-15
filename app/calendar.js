@@ -7,7 +7,7 @@ import { printSheet } from '../views/print.js';
 import { daySection, remindersOn, todoSection } from '../views/parts.js';
 import { monthView, monthRange, fetchRangeFor } from '../views/month.js';
 import { eventDetails } from '../views/forms.js';
-import { monthReminders } from '../views/reminders.js';
+import { monthReminders, reminderActions } from '../views/reminders.js';
 import { toast } from '../views/sheet.js';
 import { busy } from '../views/fields.js';
 import { formContext } from './context.js';
@@ -74,7 +74,7 @@ function draw(s, all) {
     return el('div', {},
       daySection(t, 'Events', byDate.get(s.date), { onItem: onItem(s.date), onRestore: s.view === 'FAMILY' ? onRestore : undefined }),
       todoSection(data.todos.filter((x) => x.due_date === s.date), todoActions),
-      remindersOn(data.reminders, s.date),
+      remindersOn(data.reminders, s.date, (r) => reminderActions(ctx, r, today())),
       s.view === 'FAMILY' ? '' : el('p', { class: 'muted small' }, 'Cancelled events can be restored from the Family view.'));
   }
   const tomorrow = addDays(data.from, 1);
@@ -84,7 +84,7 @@ function draw(s, all) {
     daySection(t, `Today · ${niceDate(data.from)}`, byDate.get(data.from), { onTitle: () => openDay(data.from), onItem: onItem(data.from) }),
     todoSection(data.todos.filter((x) => x.due_date === data.from), todoActions),
     daySection(t, `Tomorrow · ${niceDate(tomorrow)}`, byDate.get(tomorrow), { onTitle: () => openDay(tomorrow), onItem: onItem(tomorrow) }),
-    remindersOn(data.reminders, data.from));
+    remindersOn(data.reminders, data.from, (r) => reminderActions(ctx, r, today())));
 }
 
 /**

@@ -149,16 +149,17 @@ export function daySection(theme, title, day, options = {}) {
 }
 
 /**
- * Reminders whose window includes a date.
+ * Reminders whose window includes a date; tapping one opens it, as on Month (RT, 2026-11-15).
  * @param {AppReminder[]} reminders
  * @param {string} date
+ * @param {(r: AppReminder) => void} [onTap]
  */
-export function remindersOn(reminders, date) {
+export function remindersOn(reminders, date, onTap) {
   // In progress ones (ADR-121) are not things to do today: they are under Month's In progress.
   const due = reminders.filter((r) => r.status !== 'IN_PROGRESS' && r.window_start <= date && r.window_end >= date);
   return due.length === 0 ? '' : el('section', { class: 'reminders' },
     el('h2', {}, 'Reminders'),
-    el('ul', { class: 'items' }, due.map((r) => el('li', { class: 'item' },
+    el('ul', { class: 'items' }, due.map((r) => el('li', { class: `item${onTap ? ' tappable' : ''}`, ...(onTap ? { onclick: () => onTap(r) } : {}) },
       el('span', { class: 'time' }, `by ${r.window_end.slice(8)}/${r.window_end.slice(5, 7)}`),
       el('div', { class: 'body' }, `${r.owner.join('+')} - ${r.title}`)))));
 }
