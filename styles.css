@@ -161,6 +161,8 @@ button:disabled { opacity: 0.6; }
 .add-menu { display: flex; flex-direction: column; gap: 10px; padding: 16px 16px calc(24px + env(safe-area-inset-bottom)); }
 /* Only the menu's own choices: not Quick Capture's mic and Go (RT, 2026-09-25). */
 .add-menu > button { font-size: 17px; padding: 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--soft); cursor: pointer; text-align: left; }
+/* Quick capture, folded at the bottom (RT, 2026-11-15): a plain link, not a big button. */
+.add-menu > button.capture-link { font-size: 15px; padding: 8px 2px; border: 0; background: none; text-align: center; }
 .cancelled h3 { font-size: 13px; color: var(--muted); margin: 14px 0 2px; }
 .cancelled s { color: var(--muted); }
 .section-head { display: flex; align-items: center; justify-content: space-between; }

@@ -133,13 +133,15 @@ export function showSignedIn() {
     // On Milestones, + adds one (ADR-112).
     if (s.screen === 'milestones') { milestoneSheet(ctx); return; }
     const date = s.screen === 'day' ? s.date : today();
+    // RT, 2026-11-15: the forms first, in the order used; Quick capture, rarely used, folded into a
+    // link at the bottom that opens its box (and the keyboard) only when tapped.
+    const capture = el('button', { type: 'button', class: 'link capture-link', onclick: () => capture.replaceWith(captureBox(ctx, () => menu.close(), user())) }, 'Quick capture…');
     const menu = openSheet('Add', el('div', { class: 'add-menu' },
-      captureBox(ctx, () => menu.close(), user()),
-      el('div', { class: 'or muted small' }, 'or add by form'),
       el('button', { type: 'button', onclick: () => { menu.close(); eventSheet(ctx, { date }); } }, 'Event'),
-      el('button', { type: 'button', onclick: () => { menu.close(); routineSheet(ctx); } }, 'Weekly routine'),
       el('button', { type: 'button', onclick: () => { menu.close(); reminderSheet(ctx); } }, 'Reminder'),
-      el('button', { type: 'button', onclick: () => { menu.close(); milestoneSheet(ctx); } }, 'Milestone')));
+      el('button', { type: 'button', onclick: () => { menu.close(); routineSheet(ctx); } }, 'Weekly routine'),
+      el('button', { type: 'button', onclick: () => { menu.close(); milestoneSheet(ctx); } }, 'Milestone'),
+      capture));
   };
   window.addEventListener('hashchange', () => app.show());
   // A phone keeps the app open in the background for hours: coming back redraws from the saved copy
